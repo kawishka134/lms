@@ -1,0 +1,2 @@
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS access_expiry_date TIMESTAMP WITH TIME ZONE;
+ALTER TABLE instructors ADD COLUMN IF NOT EXISTS commission_status TEXT DEFAULT 'Pending';
