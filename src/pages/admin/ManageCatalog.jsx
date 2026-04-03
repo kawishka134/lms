@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { BookOpen, Plus, Trash2, Edit2, CheckCircle, Save, Image as ImageIcon, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function ManageCatalog() {
+    const { showToast } = useToast();
     const [courses, setCourses] = useState([]);
     const [activeTab, setActiveTab] = useState('list');
     const [isSaving, setIsSaving] = useState(false);
-    const [successMsg, setSuccessMsg] = useState('');
     const [editingId, setEditingId] = useState(null);
 
     const [formData, setFormData] = useState({
@@ -68,16 +69,15 @@ export default function ManageCatalog() {
 
         if (editingId) {
             const { error } = await supabase.from('courses').update(submissionData).eq('id', editingId);
-            if (!error) setSuccessMsg('Class updated successfully!');
-            else alert(error.message);
+            if (!error) showToast('Class updated successfully!', 'success');
+            else showToast(error.message, 'error');
         } else {
             const { error } = await supabase.from('courses').insert(submissionData);
-            if (!error) setSuccessMsg('New class added to catalog!');
-            else alert(error.message);
+            if (!error) showToast('New class added to catalog!', 'success');
+            else showToast(error.message, 'error');
         }
 
         setTimeout(() => {
-            setSuccessMsg('');
             setActiveTab('list');
             setEditingId(null);
             setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '' });
@@ -98,7 +98,7 @@ export default function ManageCatalog() {
             const { data } = supabase.storage.from('site-media').getPublicUrl(fileName);
             setFormData({ ...formData, thumbnail_url: data.publicUrl });
         } catch (error) {
-            alert('Upload failed: ' + error.message);
+            showToast('Upload failed: ' + error.message, 'error');
         }
         setUploading(false);
     };
@@ -120,8 +120,23 @@ export default function ManageCatalog() {
     };
 
     const handleDelete = async (id) => {
-        if (window.confirm('Delete this course from catalog?')) {
-            await supabase.from('courses').delete().eq('id', id);
+        const { count } = await supabase
+            .from('enrollments')
+            .select('*', { count: 'exact', head: true })
+            .eq('course_id', id);
+
+        const enrolledInfo = count > 0 
+            ? `⚠️ WARNING: There are ${count} student(s) currently enrolled in this class.\n` 
+            : `There are 0 students enrolled in this class.\n`;
+
+        if (window.confirm(`Are you sure you want to delete this class from the catalog?\n\n${enrolledInfo}\nIf you delete this, the class and all related enrollments will be permanently removed.`)) {
+            const { error } = await supabase.from('courses').delete().eq('id', id);
+            if (error) {
+                console.error("Delete course error:", error);
+                showToast("Failed to delete course: " + error.message, 'error');
+            } else {
+                showToast('Course deleted successfully!', 'success');
+            }
             fetchCoursesAndInstructors();
         }
     };
@@ -142,12 +157,6 @@ export default function ManageCatalog() {
                     </button>
                 </div>
             </div>
-
-            {successMsg && (
-                <div className="card" style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
-                    <CheckCircle size={20} /> {successMsg}
-                </div>
-            )}
 
             {activeTab === 'list' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>

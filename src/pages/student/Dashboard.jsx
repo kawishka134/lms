@@ -952,6 +952,8 @@ export default function Dashboard() {
               { id: 'free_class', label: 'Free', icon: <PlayCircle size={20} /> },
               { id: 'recordings', label: 'Rec', icon: <Video size={20} /> },
               { id: 'live_today', label: 'Live', icon: <Clock size={20} /> },
+              { id: 'class_schedule', label: 'Schedule', icon: <Calendar size={20} /> },
+              { id: 'tute_pdf', label: 'Tutes', icon: <FileText size={20} /> },
               { id: 'about_me', label: 'Me', icon: <UserCircle size={20} /> }
           ].map(s => (
               <button key={s.id} onClick={() => setActiveTab(s.id)} className={`nav-item-mobile ${activeTab === s.id ? 'active' : ''}`}>{s.icon} <span>{s.label}</span></button>

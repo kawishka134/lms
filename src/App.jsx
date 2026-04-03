@@ -29,6 +29,7 @@ import ManageTutes from './pages/admin/ManageTutes';
 import ManageCatalog from './pages/admin/ManageCatalog';
 import ManageSettings from './pages/admin/ManageSettings';
 import ManageInstructors from './pages/admin/ManageInstructors';
+import Analytics from './pages/admin/Analytics';
 
 import { ToastProvider } from './components/Toast';
 import './App.css';
@@ -57,6 +58,7 @@ function App() {
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="approvals" element={<Approvals />} />
           <Route path="payments" element={<Payments />} />
           <Route path="manage-live" element={<ManageLive />} />

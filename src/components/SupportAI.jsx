@@ -25,23 +25,38 @@ export default function SupportAI() {
     setMessage('');
     setIsTyping(true);
 
-    // Mock AI Response
+    // Enhanced AI Logic for Singlish, Sinhala, English
     setTimeout(() => {
       setIsTyping(false);
-      let response = "ස්තූතියි ඔබේ පණිවිඩයට. අපේ කණ්ඩායම ඉක්මනින් ඔබව සම්බන්ධ කර ගනීවි. ඔබට දැනට ඇති ගැටලුව විස්තර කරන්න.";
+      let response = "ස්තූතියි ඔබේ පණිවිඩයට. මට ඒක හරියටම තේරුණේ නෑ. ඒත් ඔයාට අපේ Admin ව සම්බන්ධ කරගන්න ඕන නම් Contact Us පිටුවට යන්න පුළුවන්. (Thank you. I didn't quite catch that. If you need admin support, please visit the Contact page.)";
       
-      if (userMsg.toLowerCase().includes('hello') || userMsg.toLowerCase().includes('hi')) {
-        response = "ආයුබෝවන්! ඔබට අද දිනයේ සහාය අවශ්‍ය වන්නේ කුමන පාඨමාලාව සම්බන්ධයෙන්ද?";
-      } else if (userMsg.toLowerCase().includes('course') || userMsg.toLowerCase().includes('panthi')) {
-        response = "ඔබට අපගේ පාඨමාලා (Courses) මෙනුවෙන් සියලුම විස්තර බලාගත හැකියි. නැතිනම් වැඩිදුර විස්තර සඳහා 077 123 4567 අමතන්න.";
+      const msgLower = userMsg.toLowerCase();
+      
+      if (msgLower.includes('contact') || msgLower.includes('admin') || msgLower.includes('sir wa') || msgLower.includes('sirva') || msgLower.includes('katha karanna') || msgLower.includes('adminwa') || msgLower.includes('help') || msgLower.includes('udawwa')) {
+        response = <span>ඔබට Admin හෝ ගුරුවරයා සමග සම්බන්ධ වීමට අවශ්‍ය නම් කරුණාකර අපගේ <a href="/contact" style={{color: '#ffbaba', textDecoration: 'underline'}}>Contact Us පිටුවට යන්න</a>. (Please visit our <a href="/contact" style={{color: '#ffbaba', textDecoration: 'underline'}}>Contact Us page</a> to get in touch with the Admin).</span>;
+      } 
+      else if (msgLower.includes('hello') || msgLower.includes('hi') || msgLower.includes('hey') || msgLower.includes('kohomada') || msgLower.includes('halo')) {
+        response = "ආයුබෝවන්! (Hello!) ඔබට අද දිනයේ සහාය අවශ්‍ය වන්නේ කුමන දේටද? පන්ති ගැනද? ගෙවීම් ගැනද? (How can I help you today?)";
+      } 
+      else if (msgLower.includes('class') || msgLower.includes('panthi') || msgLower.includes('course') || msgLower.includes('schedule') || msgLower.includes('timetable') || msgLower.includes('kalasathahana')) {
+        response = "ඔබට පන්ති වේලාවන් සහ දින (Class Schedules) ඔයාගේ Dashboard එකේ තියෙන 'Schedule' (කාලසටහන) අංශයෙන් බලාගත හැකියි. (You can view class times in the 'Schedule' tab on your Dashboard.)";
+      }
+      else if (msgLower.includes('payment') || msgLower.includes('pay') || msgLower.includes('salli') || msgLower.includes('gewim') || msgLower.includes('gewanna')) {
+        response = "පන්ති ගාස්තු ගෙවන්න ඕනෙ නම්, Dashboard එකේ තියෙන 'Payment' අංශයට ගිහින් අදාළ පන්තිය තෝරලා Slip එක අප්ලෝඩ් කරන්න. (To make a payment, go to the 'Payment' section in your Dashboard and upload your bank slip.)";
+      }
+      else if (msgLower.includes('video') || msgLower.includes('record') || msgLower.includes('balanne') || msgLower.includes('balanna')) {
+        response = "Recordings සහ වීඩියෝ බලන්න ඔයාගේ Dashboard එකේ 'Recordings' අංශයට යන්න. මේවා බලන්න ඔයා අදාළ මාසයට ගෙවීම් කරලා තියෙන්න ඕනේ. (Go to the 'Recordings' tab in your Dashboard to watch videos.)";
+      }
+      else if (msgLower.includes('password') || msgLower.includes('login') || msgLower.includes('log wenne')) {
+        response = "ඔයාගේ පාස්වර්ඩ් එක අමතක වෙලා නම් හදාගන්න බැරි නම්, ඉක්මනින් Admin ව කන්ටැක්ට් කරගන්න. Contact Us පිටුවට යන්න.";
       }
 
       setMessages(prev => [...prev, { role: 'bot', text: response }]);
-    }, 1500);
+    }, 1200);
   };
 
   return (
-    <div style={{ position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 1000, fontFamily: 'var(--font-family)' }}>
+    <div className="support-ai-wrapper">
       {/* Floating Button */}
       {!isOpen && (
         <button 
@@ -147,6 +162,19 @@ export default function SupportAI() {
       )}
 
       <style>{`
+        .support-ai-wrapper {
+          position: fixed;
+          bottom: 2rem;
+          right: 2rem;
+          z-index: 1000;
+          font-family: var(--font-family);
+        }
+        @media (max-width: 992px) {
+          .support-ai-wrapper {
+             bottom: 80px; /* Moves above the bottom nav */
+             right: 1.5rem;
+          }
+        }
         @keyframes slideIn {
           from { opacity: 0; transform: translateY(30px) scale(0.95); }
           to { opacity: 1; transform: translateY(0) scale(1); }
