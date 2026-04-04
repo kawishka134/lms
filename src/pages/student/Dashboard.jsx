@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Clock, AlertCircle, PlayCircle, Video, FileText, Phone, ShieldCheck,
-  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock
+  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -212,6 +212,7 @@ export default function Dashboard() {
   const [newNoticesCount, setNewNoticesCount] = useState(0);
   const [latestNoticeTitle, setLatestNoticeTitle] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [instituteSettings, setInstituteSettings] = useState(null);
   
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -343,6 +344,9 @@ export default function Dashboard() {
 
                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
                      if(myTutes) setTuteEnrollments(myTutes);
+
+                     const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').single();
+                     if(settings) setInstituteSettings(settings);
                  }
              }
          } catch(e) { console.error(e) }
@@ -843,6 +847,35 @@ export default function Dashboard() {
             );
             return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    {/* Dashboard Hero Ad Video */}
+                    {instituteSettings?.intro_video_url && (
+                        <div className="card glass" style={{ padding: '1.5rem', border: '1px solid var(--color-surface-border)', overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)' }}>
+                                    <Video size={20} />
+                                </div>
+                                <h3 style={{ margin: 0, fontWeight: 900 }}>Featured Announcement</h3>
+                            </div>
+                            <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '16px', overflow: 'hidden', backgroundColor: 'black', border: '1px solid var(--color-surface-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.4)' }}>
+                                {(() => {
+                                    const videoUrl = instituteSettings.intro_video_url;
+                                    const ytId = extractYouTubeId(videoUrl);
+                                    if (ytId) {
+                                        return (
+                                            <iframe 
+                                                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0&modestbranding=1`}
+                                                style={{ width: '100%', height: '100%', border: 'none' }}
+                                                allow="autoplay; encrypted-media; picture-in-picture"
+                                                allowFullScreen
+                                            />
+                                        );
+                                    }
+                                    return <video src={videoUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
+                                })()}
+                            </div>
+                        </div>
+                    )}
+
                     <div style={{ padding: '1.5rem', backgroundColor: 'var(--color-primary-light)', borderRadius: '1rem', border: '1px solid var(--color-primary)' }}>
                         <p style={{ margin: 0, fontWeight: 700, color: 'var(--color-primary)', fontSize: '0.95rem' }}>
                             👋 පහත දැක්වෙන්නේ ඔබේ {studentProfile?.year} - {studentProfile?.subject} විෂය නිර්දේශයට අදාළ පන්ති වේ. ඔබට අවශ්‍ය පන්තිය තෝරා "Pay Now" මගින් ගෙවීම් කරන්න.
@@ -969,41 +1002,102 @@ export default function Dashboard() {
               <button key={s.id} onClick={() => setActiveTab(s.id)} className={`nav-item-mobile ${activeTab === s.id ? 'active' : ''}`}>{s.icon} <span>{s.label}</span></button>
           ))}
       </nav>
-      {showUploadModal && <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
-              <div className="card" style={{ width: '100%', maxWidth: '450px', position: 'relative', border: '5px solid var(--color-primary)' }}>
-                  <X size={24} onClick={() => setShowUploadModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', cursor: 'pointer', opacity: 0.5 }} />
-                  <h2 style={{ fontWeight: 900, fontSize: '1.5rem', marginBottom: '0.5rem' }}>Upload Receipt</h2>
+      {showUploadModal && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '1rem' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '1100px', height: 'auto', maxHeight: '95vh', overflowY: 'auto', position: 'relative', padding: '2rem', background: 'white', color: '#0f172a', borderRadius: '24px', border: '5px solid #eee', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2.5rem' }}>
+            
+            <button onClick={() => setShowUploadModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', zIndex: 10 }}><X size={28} /></button>
 
-                  {/* Sinhalese Instructions */}
-                  <div style={{ backgroundColor: 'var(--color-primary-light)', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid var(--color-primary)' }}>
-                      <p style={{ margin: 0, fontWeight: 800, color: 'var(--color-primary)', lineHeight: '1.6' }}>
-                          ⚠️ කරුණාකර බැංකු රසීදුවේ (Slip) පෑනෙන් පැහැදිලිව පහත විස්තර ලියන්න:<br/>
-                          1. ඔබේ සම්පූර්ණ නම<br/>
-                          2. විෂය සහ වසර (Year)<br/>
-                          3. දුරකථන අංකය
-                      </p>
-                  </div>
+            {/* Left Section: Video Info */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                   <Video size={24} color="var(--color-primary)" />
+                   <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>About this Class</h2>
+                </div>
 
-                  <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div style={{ position: 'relative', textAlign: 'left' }}>
-                        <label className="input-label" style={{ marginBottom: '0.25rem' }}>Verify NIC</label>
-                        <input placeholder="Enter your registered NIC" value={nicNumber} onChange={e => setNicNumber(e.target.value)} className="input-field" style={{ marginBottom: 0 }} />
+                <div style={{ width: '100%', aspectRatio: '16/9', background: '#000', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '1px solid #eee' }}>
+                     {(() => {
+                        const course = availableCourses.find(c => c.id === selectedCourseId);
+                        const videoUrl = course?.promo_video_url;
+                        if (!videoUrl) return (
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.2 }}>
+                                <PlayCircle size={64} />
+                            </div>
+                        );
+
+                        const ytId = extractYouTubeId(videoUrl);
+                        if (ytId) {
+                            return (
+                                <iframe 
+                                    src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`}
+                                    style={{ width: '100%', height: '100%', border: 'none' }}
+                                    title="Promo Video"
+                                    allow="autoplay; encrypted-media"
+                                    allowFullScreen
+                                />
+                            );
+                        }
+                        return <video src={videoUrl} autoPlay loop playsInline controls style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
+                     })()}
+                </div>
+
+                {availableCourses.find(c => c.id === selectedCourseId)?.free_lesson_url && (
+                    <div style={{ padding: '1.5rem', borderRadius: '20px', border: '2px solid #22c55e', backgroundColor: '#f0fdf4', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center' }}>
+                         <div style={{ background: '#22c55e', color: 'white', padding: '0.4rem 1rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: 900, textTransform: 'uppercase' }}>Limited Time Access</div>
+                         <h3 style={{ margin: 0, fontWeight: 800 }}>Watch a Free Demo Lesson</h3>
+                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#166534', opacity: 0.8 }}>Check the teaching style before you enroll.</p>
+                         <button 
+                            onClick={() => { setShowUploadModal(false); setSelectedVideo({ url: availableCourses.find(c => c.id === selectedCourseId).free_lesson_url, title: `Demo: ${availableCourses.find(c => c.id === selectedCourseId).title}` }); }}
+                            className="btn btn-primary" 
+                            style={{ background: '#22c55e', width: '100%', gap: '0.75rem' }}
+                         >
+                            <PlayCircle size={20} /> Watch Free Lesson
+                         </button>
                     </div>
+                )}
+            </div>
+
+            {/* Right Section: Form */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                   <CreditCard size={24} color="#0ea5e9" />
+                   <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>Secure Payment</h2>
+                </div>
+
+                <div style={{ background: '#f0f9ff', padding: '1.5rem', borderRadius: '20px', borderLeft: '6px solid #0ea5e9', marginBottom: '0.5rem' }}>
+                    <p style={{ margin: 0, fontWeight: 700, color: '#0369a1', lineHeight: '1.7', fontSize: '0.95rem' }}>
+                        ⚠️ බැංකු රිසිට් පතේ (Slip) පෑනෙන් පැහැදිලිව පහත විස්තර ලියන්න:<br/>
+                        1. ඔබේ සම්පූර්ණ නම<br/>
+                        2. පන්තියේ නම<br/>
+                        3. දුරකථන අංකය
+                    </p>
+                </div>
+
+                <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div>
-                        <label className="input-label" style={{ marginBottom: '0.25rem', textAlign: 'left', display: 'block' }}>Bank Receipt Image</label>
-                        <div onClick={() => fileInputRef.current.click()} style={{ border: '2px dashed var(--color-primary)', padding: '2rem', textAlign: 'center', borderRadius: '12px', cursor: 'pointer', backgroundColor: 'var(--color-bg)' }}>
-                            <UploadCloud size={32} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                            <p style={{ fontWeight: 700 }}>{selectedFile ? selectedFile.name : 'Click to select slip image'}</p>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Verify NIC Number</label>
+                        <input placeholder="200414402846" value={nicNumber} onChange={e => setNicNumber(e.target.value)} style={{ width: '100%', padding: '1.25rem', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }} />
+                    </div>
+
+                    <div>
+                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Upload Receipt Image</label>
+                        <div onClick={() => fileInputRef.current.click()} style={{ border: '3px dashed #0ea5e9', background: '#f8fafc', padding: '2.5rem', borderRadius: '20px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                            <UploadCloud size={40} color="#0ea5e9" style={{ marginBottom: '1rem', opacity: 0.7 }} />
+                            <p style={{ margin: 0, fontWeight: 800, color: '#0ea5e9', fontSize: '1rem' }}>{selectedFile ? selectedFile.name : 'Click to Upload Slip Image'}</p>
+                            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>0 Files With Changes</p>
                         </div>
                     </div>
-                    {uploadErrorMsg && <p style={{ color: 'var(--color-danger)', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>❌ {uploadErrorMsg}</p>}
+                    {uploadErrorMsg && <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>❌ {uploadErrorMsg}</p>}
                     <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} />
-                    <button type="submit" disabled={isUploading} className="btn btn-primary" style={{ width: '100%', marginTop: '1rem', height: '54px', fontSize: '1.1rem' }}>
-                        {isUploading ? 'Uploading...' : 'Confirm & Submit'}
+                    
+                    <button type="submit" disabled={isUploading} style={{ background: 'var(--color-primary-gradient)', color: 'white', padding: '1.25rem', borderRadius: '16px', border: 'none', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 10px 20px rgba(14, 165, 233, 0.3)' }}>
+                        {isUploading ? 'Registering...' : 'Submit Payment Slip'}
                     </button>
-                  </form>
-                </div>
-            </div>}
+                </form>
+            </div>
+          </div>
+        </div>
+      )}
 
        {/* Tute Payment Modal */}
        {showTuteModal && selectedTute && (
