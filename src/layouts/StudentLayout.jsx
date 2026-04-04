@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { BookOpen, Menu, X, MessageSquare, Sparkles, LogOut } from 'lucide-react';
+import { Moon, Sun, BookOpen, Menu, X, MessageSquare, Sparkles, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import SupportAI from '../components/SupportAI';
@@ -7,6 +7,7 @@ import SupportAI from '../components/SupportAI';
 export default function StudentLayout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [session, setSession] = useState(null);
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -17,6 +18,13 @@ export default function StudentLayout() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  
+  const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -36,13 +44,13 @@ export default function StudentLayout() {
     <div className="app-container">
       {/* Dynamic Header: Dark/transparent on Home, White elsewhere */}
       <header className="navbar" style={{ 
-          backgroundColor: (isHomePage && !isMenuOpen) ? 'rgba(3,7,18,0.6)' : 'white',
+          backgroundColor: (isHomePage && !isMenuOpen) ? 'rgba(3,7,18,0.6)' : 'var(--color-surface)',
           backdropFilter: (isHomePage || isMenuOpen) ? 'blur(20px)' : 'none',
           WebkitBackdropFilter: (isHomePage || isMenuOpen) ? 'blur(20px)' : 'none',
           position: 'fixed',
           top: 0, left: 0, right: 0, zIndex: 1000,
           boxShadow: isHomePage ? '0 1px 0 rgba(255,255,255,0.05)' : '0 2px 10px rgba(0,0,0,0.05)',
-          borderBottom: isHomePage ? '1px solid rgba(255,255,255,0.07)' : '1px solid #eee',
+          borderBottom: isHomePage ? '1px solid rgba(255,255,255,0.07)' : '1px solid var(--color-surface-border)',
           height: '70px',
       }}>
         <div className="container navbar-inner" style={{ padding: '0 2rem' }}>
@@ -89,23 +97,32 @@ export default function StudentLayout() {
               )}
           </nav>
 
-          {/* Right side login button */}
-          <div className="nav-actions">
-              {session ? (
-                  <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.4rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: (isHomePage && !isMenuOpen) ? 'white' : 'inherit', borderColor: (isHomePage && !isMenuOpen) ? 'white' : 'inherit' }}>
-                      <LogOut size={16} /> Logout
-                  </button>
-              ) : (
-                  <Link to="/login" className="btn btn-primary" style={{ padding: '0.5rem 2rem' }}>
-                      Login
-                  </Link>
-              )}
-          </div>
+          {/* Right side actions */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button 
+                onClick={toggleTheme} 
+                style={{ background: 'none', border: 'none', color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.5rem' }}
+              >
+                {theme === 'light' ? <Moon size={22} /> : <Sun size={22} />}
+              </button>
 
-          {/* Mobile Menu Button */}
-          <button className="mobile-menu-btn" onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)' }}>
-            {isMenuOpen ? <X /> : <Menu />}
-          </button>
+              <div className="nav-actions">
+                  {session ? (
+                      <button onClick={handleLogout} className="btn btn-outline" style={{ padding: '0.4rem 1.5rem', display: 'flex', alignItems: 'center', gap: '8px', color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)', borderColor: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-surface-border)' }}>
+                          <LogOut size={16} /> Logout
+                      </button>
+                  ) : (
+                      <Link to="/login" className="btn btn-primary" style={{ padding: '0.5rem 2rem' }}>
+                          Login
+                      </Link>
+                  )}
+              </div>
+
+              {/* Mobile Menu Button */}
+              <button className="mobile-menu-btn" onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)' }}>
+                {isMenuOpen ? <X /> : <Menu />}
+              </button>
+          </div>
         </div>
       </header>
 

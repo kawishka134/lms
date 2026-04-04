@@ -55,7 +55,16 @@ export default function Catalog() {
                   <span style={{ color: 'var(--color-primary)', fontWeight: 900, fontSize: '1.1rem' }}>{c.price}</span>
                 </div>
                 <h3 style={{ fontSize: '1.3rem', fontWeight: 900, marginBottom: '1.5rem', lineHeight: '1.4', flex: 1 }}>{c.title}</h3>
-                <Link to={`/course/${c.id}`} className="btn btn-outline" style={{ width: '100%', justifyContent: 'center', height: '48px', fontWeight: 800 }}>Explore Course</Link>
+                {c.free_lesson_url && (
+                    <button 
+                        onClick={(e) => { e.preventDefault(); window.open(c.free_lesson_url, '_blank'); }} 
+                        className="btn btn-outline" 
+                        style={{ width: '100%', marginBottom: '0.5rem', color: '#10b981', borderColor: '#10b981', fontWeight: 800 }}
+                    >
+                        Watch Free Demo
+                    </button>
+                )}
+                <Link to={`/course/${c.id}`} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', height: '48px', fontWeight: 800 }}>Explore Course</Link>
             </div>
           </div>
         ))}

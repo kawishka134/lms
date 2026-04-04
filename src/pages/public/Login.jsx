@@ -13,6 +13,7 @@ export default function Login() {
   const [lockedInstructor, setLockedInstructor] = useState(null);
   const [pendingSlip, setPendingSlip] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -97,6 +98,15 @@ export default function Login() {
       const file = e.target.files[0];
       if (!file || !lockedInstructor) return;
       
+      // Clean numeric input: remove "Rs.", commas, etc.
+      const cleanAmount = paymentAmount.toString().replace(/[^0-9.]/g, '');
+
+      if (!cleanAmount || isNaN(cleanAmount) || Number(cleanAmount) <= 0) {
+          showToast("Please enter a valid payment amount (Numbers only) before uploading the slip.", 'error');
+          e.target.value = ''; // Reset file input
+          return;
+      }
+      
       setUploadLoading(true);
       try {
           const fileExt = file.name.split('.').pop();
@@ -111,6 +121,7 @@ export default function Login() {
           const { error: dbError } = await supabase.from('instructor_payments').insert([{ 
               instructor_id: lockedInstructor.id, 
               slip_url: publicUrl, 
+              amount: Number(cleanAmount),
               status: 'pending' 
           }]);
           
@@ -125,7 +136,6 @@ export default function Login() {
           setUploadLoading(false);
       }
   };
-
 
 
   return (
@@ -153,11 +163,21 @@ export default function Login() {
                         </div>
                     ) : (
                         <>
+                            <p style={{ fontWeight: 800, marginBottom: '1rem', fontSize: '0.9rem' }}>Enter Payment Amount (Rs.)</p>
+                            <input 
+                                type="number" 
+                                className="input-field" 
+                                placeholder="Example: 5000" 
+                                value={paymentAmount}
+                                onChange={(e) => setPaymentAmount(e.target.value)}
+                                style={{ marginBottom: '1rem', width: '100%' }}
+                            />
+                            
                             <p style={{ fontWeight: 800, marginBottom: '1rem', fontSize: '0.9rem' }}>Upload Commission Slip (Receipt)</p>
-                            <label className="btn btn-primary" style={{ width: '100%', cursor: 'pointer', justifyContent: 'center' }}>
+                            <label className="btn btn-primary" style={{ width: '100%', cursor: 'pointer', justifyContent: 'center', opacity: !paymentAmount ? 0.5 : 1 }}>
                                 <Upload size={18} style={{ marginRight: '8px' }} />
                                 {uploadLoading ? 'Uploading...' : 'Choose Receipt Image'}
-                                <input type="file" accept="image/*" onChange={handleUploadUnlockSlip} style={{ display: 'none' }} disabled={uploadLoading} />
+                                <input type="file" accept="image/*" onChange={handleUploadUnlockSlip} style={{ display: 'none' }} disabled={uploadLoading || !paymentAmount} />
                             </label>
                         </>
                     )}

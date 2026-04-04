@@ -555,6 +555,18 @@ function CourseCard({ course, idx }) {
             Grade {course.year || 'A/L'} • {course.subject}
           </div>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff', marginBottom: '1.5rem', lineHeight: '1.4' }}>{course.title}</h3>
+          
+          {course.free_lesson_url && (
+            <button 
+              onClick={(e) => { e.preventDefault(); window.open(course.free_lesson_url, '_blank'); }} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', background: 'transparent', border: `1px solid ${c}`, color: c, fontWeight: 800, fontSize: '0.85rem', marginBottom: '1rem', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.background = c + '22'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              Watch Free Demo
+            </button>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: '1.5rem', fontWeight: 900 }}>{course.price}</span>
             <Link to="/register" style={{

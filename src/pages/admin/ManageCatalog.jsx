@@ -19,7 +19,9 @@ export default function ManageCatalog() {
         subject: '',
         class_type: 'Theory', 
         thumbnail_url: '',
-        instructor_id: ''
+        instructor_id: '',
+        promo_video_url: '',
+        free_lesson_url: ''
     });
 
     const adminRole = localStorage.getItem('admin_role'); 
@@ -28,8 +30,10 @@ export default function ManageCatalog() {
 
     const [instructors, setInstructors] = useState([]);
     const [uploading, setUploading] = useState(false);
+    const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const [isOtherSubject, setIsOtherSubject] = useState(false);
     const fileInputRef = useRef(null);
+    const videoInputRef = useRef(null);
 
     const commonSubjects = ['Accounting', 'Business Studies', 'Economics', 'O/L Commerce'];
 
@@ -80,7 +84,7 @@ export default function ManageCatalog() {
         setTimeout(() => {
             setActiveTab('list');
             setEditingId(null);
-            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '' });
+            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '', promo_video_url: '', free_lesson_url: '' });
             fetchCoursesAndInstructors();
         }, 1500);
         setIsSaving(false);
@@ -103,6 +107,41 @@ export default function ManageCatalog() {
         setUploading(false);
     };
 
+    const handleVideoUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        // 15MB limit check
+        if (file.size > 15 * 1024 * 1024) {
+            showToast("Video size exceeds 15MB limit. Please upload a smaller video.", 'error');
+            return;
+        }
+
+        setIsUploadingVideo(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const filePath = `promo/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('promo_videos')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('promo_videos')
+                .getPublicUrl(filePath);
+
+            setFormData({ ...formData, promo_video_url: publicUrl });
+            showToast("Promo video uploaded successfully!", 'success');
+        } catch (error) {
+            showToast("Video upload failed: " + error.message, 'error');
+        } finally {
+            setIsUploadingVideo(false);
+        }
+    };
+
     const handleEdit = (course) => {
         setFormData({
             title: course.title,
@@ -113,7 +152,9 @@ export default function ManageCatalog() {
             subject: course.subject || '',
             class_type: course.class_type || 'Theory',
             thumbnail_url: course.thumbnail_url || '',
-            instructor_id: course.instructor_id || ''
+            instructor_id: course.instructor_id || '',
+            promo_video_url: course.promo_video_url || '',
+            free_lesson_url: course.free_lesson_url || ''
         });
         setEditingId(course.id);
         setActiveTab('add');
@@ -149,7 +190,7 @@ export default function ManageCatalog() {
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Update the courses visible to public visitors.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={() => { setActiveTab('list'); setEditingId(null); setFormData({title:'', description:'', price:'', year:'', batch:'', subject:'', thumbnail_url:''}); }} className={`btn ${activeTab === 'list' ? 'btn-primary' : 'btn-outline'}`}>
+                    <button onClick={() => { setActiveTab('list'); setEditingId(null); setFormData({title:'', description:'', price:'', year:'', batch:'', subject:'', thumbnail_url:'', promo_video_url:'', free_lesson_url:''}); }} className={`btn ${activeTab === 'list' ? 'btn-primary' : 'btn-outline'}`}>
                         <BookOpen size={18} /> View Catalog
                     </button>
                     <button onClick={() => setActiveTab('add')} className={`btn ${activeTab === 'add' ? 'btn-primary' : 'btn-outline'}`}>
@@ -297,6 +338,29 @@ export default function ManageCatalog() {
                                     </button>
                                     <input type="file" ref={fileInputRef} accept="image/*" style={{ display: 'none' }} onChange={handleFileUpload} />
                                     <input type="url" className="input-field" style={{ backgroundColor: 'white' }} placeholder="... or paste Image URL here" value={formData.thumbnail_url} onChange={e => setFormData({...formData, thumbnail_url: e.target.value})} />
+                                    
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem' }}>
+                                        <div>
+                                            <label className="input-label" style={{ fontSize: '0.75rem' }}>Promo Video (YouTube URL or Upload)</label>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                <input className="input-field" style={{ backgroundColor: 'white' }} value={formData.promo_video_url} onChange={e => setFormData({...formData, promo_video_url: e.target.value})} placeholder="YouTube URL or Uploaded Link" />
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => videoInputRef.current.click()} 
+                                                    className="btn btn-outline" 
+                                                    style={{ fontSize: '0.75rem', padding: '0.4rem', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                                                    disabled={isUploadingVideo}
+                                                >
+                                                    {isUploadingVideo ? 'Uploading...' : 'Upload MP4 Video (Max 15MB)'}
+                                                </button>
+                                                <input type="file" ref={videoInputRef} accept="video/mp4" style={{ display: 'none' }} onChange={handleVideoUpload} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="input-label" style={{ fontSize: '0.75rem' }}>Free Lesson URL (YouTube)</label>
+                                            <input className="input-field" style={{ backgroundColor: 'white' }} value={formData.free_lesson_url} onChange={e => setFormData({...formData, free_lesson_url: e.target.value})} placeholder="YouTube URL" />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

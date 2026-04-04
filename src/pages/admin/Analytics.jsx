@@ -31,6 +31,9 @@ export default function Analytics() {
                 // Fetch approved enrollments to calculate real revenue and popularity
                 const { data: approvedEnrollments } = await supabase.from('enrollments').select('created_at, course_id, courses(title, price)').eq('status', 'approved');
                 
+                // Fetch approved instructor commissions
+                const { data: approvedCommissions } = await supabase.from('instructor_payments').select('created_at, amount, instructors(name)').eq('status', 'approved');
+                
                 let totalRevenue = 0;
                 let monthlyMap = {}; // Format: { "YYYY-MM": amount }
                 let classCountMap = {}; // Format: { "Course Title": count }
@@ -60,6 +63,22 @@ export default function Analytics() {
 
                         // Add to class popularity mapping
                         classCountMap[courseTitle] = (classCountMap[courseTitle] || 0) + 1;
+                    });
+                }
+                
+                if (approvedCommissions) {
+                    approvedCommissions.forEach(c => {
+                        const amount = Number(c.amount) || 0;
+                        totalRevenue += amount;
+                        
+                        const dateObj = new Date(c.created_at);
+                        const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                        const monthLabel = dateObj.toLocaleString('en-US', { month: 'short' });
+                        
+                        if (!monthlyMap[monthKey]) {
+                            monthlyMap[monthKey] = { label: monthLabel, amount: 0, sortKey: monthKey };
+                        }
+                        monthlyMap[monthKey].amount += amount;
                     });
                 }
                 
@@ -111,27 +130,42 @@ export default function Analytics() {
                 .from('enrollments')
                 .select('created_at, courses(title, price), profiles(full_name, nic, phone)')
                 .eq('status', 'approved');
+                
+            const { data: commissionData } = await supabase
+                .from('instructor_payments')
+                .select('created_at, amount, instructors(name)')
+                .eq('status', 'approved');
             
-            if (!data || data.length === 0) {
+            if ((!data || data.length === 0) && (!commissionData || commissionData.length === 0)) {
                 alert("No payment data found.");
                 setIsLoading(false);
                 return;
             }
 
-            let csvContent = "Date,Student Name,NIC,Phone,Course Name,Amount\n";
+            let csvContent = "Date,User / Student Name,NIC,Phone,Course Name / Payment Type,Amount\n";
 
-            data.forEach(item => {
-                const date = new Date(item.created_at).toLocaleDateString();
-                const studentName = item.profiles?.full_name || 'N/A';
-                const nic = item.profiles?.nic || 'N/A';
-                const phone = item.profiles?.phone || 'N/A';
-                const course = item.courses?.title || 'Unknown Course';
-                // Remove commas and extract numbers
-                const amount = item.courses?.price ? String(item.courses.price).replace(/,/g, '') : '0';
-                
-                // Wrap in quotes to prevent CSV formatting issues
-                csvContent += `"${date}","${studentName}","${nic}","${phone}","${course}","${amount}"\n`;
-            });
+            if (data) {
+                data.forEach(item => {
+                    const date = new Date(item.created_at).toLocaleDateString();
+                    const studentName = item.profiles?.full_name || 'N/A';
+                    const nic = item.profiles?.nic || 'N/A';
+                    const phone = item.profiles?.phone || 'N/A';
+                    const course = item.courses?.title || 'Student Monthly Payment';
+                    const amount = item.courses?.price ? String(item.courses.price).replace(/,/g, '') : '0';
+                    
+                    csvContent += `"${date}","${studentName}","${nic}","${phone}","${course}","${amount}"\n`;
+                });
+            }
+            
+            if (commissionData) {
+                commissionData.forEach(item => {
+                    const date = new Date(item.created_at).toLocaleDateString();
+                    const instructorName = item.instructors?.name || 'N/A';
+                    const amount = item.amount || '0';
+                    
+                    csvContent += `"${date}","${instructorName}","N/A","N/A","Instructor Commission","${amount}"\n`;
+                });
+            }
 
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);

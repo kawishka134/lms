@@ -1,9 +1,13 @@
 :root {
   /* ── Bright, Colorful Light Theme (Home page has its own dark styles) ── */
-  --color-bg: #f8fafc;
+  --color-bg: #fdfefe;
+  --color-bg-mesh: radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.1) 0px, transparent 50%),
+                  radial-gradient(at 50% 0%, rgba(99, 102, 241, 0.1) 0px, transparent 50%),
+                  radial-gradient(at 100% 0%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
   --color-surface: #ffffff;
-  --color-surface-hover: #f1f5f9;
-  --color-surface-border: #e2e8f0;
+  --color-surface-rgb: 255, 255, 255;
+  --color-surface-hover: #f8fafc;
+  --color-surface-border: #f1f5f9;
 
   --color-primary: #0ea5e9;
   --color-primary-hover: #0284c7;
@@ -39,6 +43,20 @@
   --shadow-premium: 0 25px 50px -12px rgba(14, 165, 233, 0.15);
 }
 
+[data-theme='dark'] {
+  --color-bg: #030712;
+  --color-bg-mesh: radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.15) 0px, transparent 50%),
+                  radial-gradient(at 50% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
+                  radial-gradient(at 100% 0%, rgba(225, 29, 72, 0.1) 0px, transparent 50%);
+  --color-surface: #0f172a;
+  --color-surface-rgb: 15, 23, 42;
+  --color-surface-hover: #1e293b;
+  --color-surface-border: rgba(14, 165, 233, 0.15);
+  --color-text: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-primary-light: rgba(14, 165, 233, 0.25);
+}
+
 /* --- ULTRA PREMIUM ANIMATIONS --- */
 
 @keyframes revealSkew {
@@ -64,6 +82,12 @@
 }
 
 /* --- UTILITY CLASSES --- */
+
+.mobile-only-flex { display: none !important; }
+@media (max-width: 991px) {
+  .mobile-only-flex { display: flex !important; }
+  .desktop-only-flex { display: none !important; }
+}
 
 .reveal-skew {
   opacity: 0;
@@ -130,6 +154,8 @@
 body {
   font-family: var(--font-family);
   background-color: var(--color-bg);
+  background-image: var(--color-bg-mesh);
+  background-attachment: fixed;
   color: var(--color-text);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -385,10 +411,10 @@ ul {
 }
 
 .glass {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(var(--color-surface-rgb, 255, 255, 255), 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  border: 1px solid var(--color-surface-border);
 }
 
 @media (max-width: 640px) {
@@ -569,7 +595,7 @@ ul {
     bottom: 0;
     left: 0;
     right: 0;
-    background: white;
+    background: var(--color-surface);
     box-shadow: 0 -2px 15px rgba(0,0,0,0.1);
     z-index: 2000;
     padding: 0.75rem 1rem;

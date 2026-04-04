@@ -878,6 +878,16 @@ export default function Dashboard() {
                                     <h3 style={{ fontSize: '1.25rem', fontWeight: 900, marginBottom: '0.5rem' }}>{course.title}</h3>
                                     <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem', flex: 1 }}>{course.description || 'Access monthly lessons, recordings and tutes for this class.'}</p>
                                     
+                                    {course.free_lesson_url && (
+                                        <button 
+                                            onClick={(e) => { e.preventDefault(); setSelectedVideo({ url: course.free_lesson_url, title: `Free Lesson: ${course.title}` }); }} 
+                                            className="btn btn-outline" 
+                                            style={{ width: '100%', marginBottom: '0.75rem', color: '#10b981', borderColor: '#10b981', fontWeight: 800, fontSize: '0.85rem' }}
+                                        >
+                                            <PlayCircle size={16} /> Watch Free Lesson
+                                        </button>
+                                    )}
+
                                     {(!enrollment || enrollment.status === 'rejected' || isExpired) ? (
                                         <button 
                                             onClick={() => { setSelectedCourseId(course.id); setShowUploadModal(true); }} 
@@ -938,7 +948,7 @@ export default function Dashboard() {
                   <button onClick={handleLogout} style={{ marginTop: 'auto', background: 'none', border: 'none', padding: '1rem', color: 'var(--color-danger)', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><LogOut size={18} /> Logout</button>
               </aside>
               <main className="dashboard-main" style={{ flex: 1, padding: '0 1rem' }}>
-                  <div style={{ position: 'sticky', top: 0, background: 'rgba(248, 250, 252, 0.95)', backdropFilter: 'blur(10px)', padding: '1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50, marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', backdropFilter: 'blur(10px)', padding: '1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50, marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
                       <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>{sections.find(s => s.id === activeTab)?.label}</h2>
                       {(activeTab === 'free_class' || activeTab === 'recordings') && <input placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '0.6rem 1.2rem', borderRadius: '50px', border: '1px solid var(--color-surface-border)' }} />}
                   </div>
