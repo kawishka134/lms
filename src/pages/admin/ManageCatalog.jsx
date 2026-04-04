@@ -21,7 +21,11 @@ export default function ManageCatalog() {
         thumbnail_url: '',
         instructor_id: '',
         promo_video_url: '',
-        free_lesson_url: ''
+        free_lesson_url: '',
+        bank_name: '',
+        bank_account_no: '',
+        bank_account_name: '',
+        bank_branch: ''
     });
 
     const adminRole = localStorage.getItem('admin_role'); 
@@ -41,7 +45,8 @@ export default function ManageCatalog() {
         const { data: cData } = await supabase.from('courses').select('*, instructors(name)').order('created_at', { ascending: false });
         if (cData) setCourses(cData);
         
-        const { data: iData } = await supabase.from('instructors').select('id, name');
+        // Fetch instructors WITH bank details so we can auto-fill
+        const { data: iData } = await supabase.from('instructors').select('id, name, bank_name, bank_account_no, bank_account_name, bank_branch');
         if (iData) setInstructors(iData);
     };
 
@@ -84,7 +89,7 @@ export default function ManageCatalog() {
         setTimeout(() => {
             setActiveTab('list');
             setEditingId(null);
-            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '', promo_video_url: '', free_lesson_url: '' });
+            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '', promo_video_url: '', free_lesson_url: '', bank_name: '', bank_account_no: '', bank_account_name: '', bank_branch: '' });
             fetchCoursesAndInstructors();
         }, 1500);
         setIsSaving(false);
@@ -143,6 +148,15 @@ export default function ManageCatalog() {
     };
 
     const handleEdit = (course) => {
+        // Find the instructor assigned to this course (to auto-fill bank details if missing)
+        const assignedInstructor = instructors.find(i => i.id === course.instructor_id);
+
+        // Use course bank details if set, else fall back to instructor's bank details
+        const bankName = course.bank_name || assignedInstructor?.bank_name || '';
+        const bankAccountNo = course.bank_account_no || assignedInstructor?.bank_account_no || '';
+        const bankAccountName = course.bank_account_name || assignedInstructor?.bank_account_name || '';
+        const bankBranch = course.bank_branch || assignedInstructor?.bank_branch || '';
+
         setFormData({
             title: course.title,
             description: course.description || '',
@@ -154,7 +168,11 @@ export default function ManageCatalog() {
             thumbnail_url: course.thumbnail_url || '',
             instructor_id: course.instructor_id || '',
             promo_video_url: course.promo_video_url || '',
-            free_lesson_url: course.free_lesson_url || ''
+            free_lesson_url: course.free_lesson_url || '',
+            bank_name: bankName,
+            bank_account_no: bankAccountNo,
+            bank_account_name: bankAccountName,
+            bank_branch: bankBranch
         });
         setEditingId(course.id);
         setActiveTab('add');
@@ -319,12 +337,34 @@ export default function ManageCatalog() {
                         {isSuperAdmin && (
                             <div>
                                 <label className="input-label">Assign Primary Instructor</label>
-                                <select className="input-field" value={formData.instructor_id} onChange={e => setFormData({...formData, instructor_id: e.target.value})} required>
+                                <select 
+                                    className="input-field" 
+                                    value={formData.instructor_id} 
+                                    onChange={e => {
+                                        const selectedId = e.target.value;
+                                        const selectedInstructor = instructors.find(i => i.id === selectedId);
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            instructor_id: selectedId,
+                                            // Auto-fill bank details from instructor if not already set manually
+                                            bank_name: selectedInstructor?.bank_name || prev.bank_name,
+                                            bank_account_no: selectedInstructor?.bank_account_no || prev.bank_account_no,
+                                            bank_account_name: selectedInstructor?.bank_account_name || prev.bank_account_name,
+                                            bank_branch: selectedInstructor?.bank_branch || prev.bank_branch,
+                                        }));
+                                    }} 
+                                    required
+                                >
                                     <option value="">-- Choose Instructor --</option>
                                     {instructors.map(inst => (
                                         <option key={inst.id} value={inst.id}>{inst.name}</option>
                                     ))}
                                 </select>
+                                {formData.instructor_id && instructors.find(i => i.id === formData.instructor_id)?.bank_account_no && (
+                                    <p style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700, marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                        ✅ Bank details auto-filled from instructor profile
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -361,6 +401,35 @@ export default function ManageCatalog() {
                                             <input className="input-field" style={{ backgroundColor: 'white' }} value={formData.free_lesson_url} onChange={e => setFormData({...formData, free_lesson_url: e.target.value})} placeholder="YouTube URL" />
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bank Payment Details */}
+                        <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '2px solid #86efac', borderRadius: '16px', padding: '1.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                                <div style={{ width: '36px', height: '36px', backgroundColor: '#16a34a', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1rem' }}>🏦</div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem' }}>Bank Payment Details</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Students will see this when they click "Pay Now" for this course</p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div>
+                                    <label className="input-label">Bank Name</label>
+                                    <input type="text" className="input-field" style={{ backgroundColor: 'white' }} placeholder="E.g. Commercial Bank" value={formData.bank_name} onChange={e => setFormData({...formData, bank_name: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="input-label">Account Number</label>
+                                    <input type="text" className="input-field" style={{ backgroundColor: 'white' }} placeholder="E.g. 1234567890" value={formData.bank_account_no} onChange={e => setFormData({...formData, bank_account_no: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="input-label">Account Holder Name</label>
+                                    <input type="text" className="input-field" style={{ backgroundColor: 'white' }} placeholder="E.g. K.M. Prabhath" value={formData.bank_account_name} onChange={e => setFormData({...formData, bank_account_name: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="input-label">Branch</label>
+                                    <input type="text" className="input-field" style={{ backgroundColor: 'white' }} placeholder="E.g. Colombo 03" value={formData.bank_branch} onChange={e => setFormData({...formData, bank_branch: e.target.value})} />
                                 </div>
                             </div>
                         </div>

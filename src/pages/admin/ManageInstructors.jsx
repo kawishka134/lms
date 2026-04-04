@@ -30,7 +30,11 @@ export default function ManageInstructors() {
     access_expiry_date: '',
     commission_status: 'Paid',
     phone: '',
-    class_type: 'Theory'
+    class_type: 'Theory',
+    bank_name: '',
+    bank_account_no: '',
+    bank_account_name: '',
+    bank_branch: ''
   });
   const [uploading, setUploading] = useState(false);
 
@@ -76,7 +80,11 @@ export default function ManageInstructors() {
         access_expiry_date: defaultExpiry.toISOString().split('T')[0],
         commission_status: 'Paid',
         phone: '',
-        class_type: 'Theory'
+        class_type: 'Theory',
+        bank_name: '',
+        bank_account_no: '',
+        bank_account_name: '',
+        bank_branch: ''
       });
     }
     setIsModalOpen(true);
@@ -460,6 +468,34 @@ export default function ManageInstructors() {
                                 <option value="Paid">✅ Paid & Clear</option>
                                 <option value="Pending">⚠️ Payment Pending</option>
                             </select>
+                        </div>
+
+                        {/* Bank Payment Details */}
+                        <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                            <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏦 Bank Details</h3>
+                            <p style={{ margin: '0 0 0.75rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Auto-filled when this instructor creates a course card.</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                    <div>
+                                        <label className="input-label">Bank Name</label>
+                                        <input className="input-field" type="text" value={formData.bank_name} onChange={e => setFormData({...formData, bank_name: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. Commercial Bank" />
+                                    </div>
+                                    <div>
+                                        <label className="input-label">Account Number</label>
+                                        <input className="input-field" type="text" value={formData.bank_account_no} onChange={e => setFormData({...formData, bank_account_no: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. 1234567890" />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                    <div>
+                                        <label className="input-label">Account Holder Name</label>
+                                        <input className="input-field" type="text" value={formData.bank_account_name} onChange={e => setFormData({...formData, bank_account_name: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. K.M. Prabhath" />
+                                    </div>
+                                    <div>
+                                        <label className="input-label">Branch</label>
+                                        <input className="input-field" type="text" value={formData.bank_branch} onChange={e => setFormData({...formData, bank_branch: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. Colombo 03" />
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

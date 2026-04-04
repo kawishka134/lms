@@ -1044,6 +1044,39 @@ export default function Dashboard() {
                     </p>
                 </div>
 
+                {/* Bank Payment Details */}
+                {(() => {
+                    const course = availableCourses.find(c => c.id === selectedCourseId);
+                    if (!course?.bank_account_no) return null;
+                    return (
+                        <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '2px solid #22c55e', borderRadius: '20px', padding: '1.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                                <div style={{ width: '42px', height: '42px', backgroundColor: '#16a34a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏦</div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Bank Transfer Details</p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                {[
+                                    { label: 'Bank Name / බැංකුව', value: course.bank_name },
+                                    { label: 'Account Number / ගිණුම් අංකය', value: course.bank_account_no },
+                                    { label: 'Account Name / නම', value: course.bank_account_name },
+                                    { label: 'Branch / ශාඛාව', value: course.bank_branch },
+                                ].filter(item => item.value).map((item, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{item.label}</span>
+                                        <span style={{ fontWeight: 900, color: '#14532d', fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{item.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <p style={{ margin: '1rem 0 0', fontSize: '0.78rem', color: '#16a34a', fontWeight: 600, textAlign: 'center' }}>
+                                💡 ඉහත ගිණුමට මුදල් transfer කර, රිසිට් පත photo ගෙන upload කරන්න
+                            </p>
+                        </div>
+                    );
+                })()}
+
                 <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div>
                         <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Verify NIC Number</label>
