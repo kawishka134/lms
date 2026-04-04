@@ -847,35 +847,6 @@ export default function Dashboard() {
             );
             return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {/* Dashboard Hero Ad Video */}
-                    {instituteSettings?.intro_video_url && (
-                        <div className="card glass" style={{ padding: '1.5rem', border: '1px solid var(--color-surface-border)', overflow: 'hidden' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                                <div style={{ width: '40px', height: '40px', background: 'var(--color-primary-light)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-primary)' }}>
-                                    <Video size={20} />
-                                </div>
-                                <h3 style={{ margin: 0, fontWeight: 900 }}>Featured Announcement</h3>
-                            </div>
-                            <div style={{ width: '100%', aspectRatio: '16/9', borderRadius: '16px', overflow: 'hidden', backgroundColor: 'black', border: '1px solid var(--color-surface-border)', boxShadow: '0 10px 30px rgba(0,0,0,0.4)' }}>
-                                {(() => {
-                                    const videoUrl = instituteSettings.intro_video_url;
-                                    const ytId = extractYouTubeId(videoUrl);
-                                    if (ytId) {
-                                        return (
-                                            <iframe 
-                                                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0&modestbranding=1`}
-                                                style={{ width: '100%', height: '100%', border: 'none' }}
-                                                allow="autoplay; encrypted-media; picture-in-picture"
-                                                allowFullScreen
-                                            />
-                                        );
-                                    }
-                                    return <video src={videoUrl} autoPlay muted loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />;
-                                })()}
-                            </div>
-                        </div>
-                    )}
-
                     <div style={{ padding: '1.5rem', backgroundColor: 'var(--color-primary-light)', borderRadius: '1rem', border: '1px solid var(--color-primary)' }}>
                         <p style={{ margin: 0, fontWeight: 700, color: 'var(--color-primary)', fontSize: '0.95rem' }}>
                             👋 පහත දැක්වෙන්නේ ඔබේ {studentProfile?.year} - {studentProfile?.subject} විෂය නිර්දේශයට අදාළ පන්ති වේ. ඔබට අවශ්‍ය පන්තිය තෝරා "Pay Now" මගින් ගෙවීම් කරන්න.
