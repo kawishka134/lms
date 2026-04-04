@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import StudentLayout from './layouts/StudentLayout';
 import AdminLayout from './layouts/AdminLayout';
+import AdminGuard from './components/AdminGuard';
+import StudentGuard from './components/StudentGuard';
 
 // Public & Student Pages
 import Home from './pages/public/Home';
@@ -39,7 +41,7 @@ function App() {
     <ToastProvider>
       <BrowserRouter>
       <Routes>
-        {/* Student/Public Routes */}
+        {/* Public Routes - No auth needed */}
         <Route element={<StudentLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/courses" element={<Catalog />} />
@@ -50,26 +52,34 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/experts" element={<AllExperts />} />
-          <Route path="/dashboard" element={<StudentDashboard />} />
           <Route path="/course/:id" element={<CourseDetails />} />
         </Route>
 
-        {/* Admin Routes */}
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="dashboard" element={<AdminDashboard />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="approvals" element={<Approvals />} />
-          <Route path="payments" element={<Payments />} />
-          <Route path="manage-live" element={<ManageLive />} />
-          <Route path="free-class" element={<ManageFreeClass />} />
-          <Route path="recordings" element={<ManageRecordings />} />
-          <Route path="announcements" element={<Announcements />} />
-          <Route path="schedule" element={<Schedule />} />
-          <Route path="tutes" element={<ManageTutes />} />
-          <Route path="catalog" element={<ManageCatalog />} />
-          <Route path="instructors" element={<ManageInstructors />} />
-          <Route path="settings" element={<ManageSettings />} />
+        {/* 🔒 Student Protected Routes */}
+        <Route element={<StudentLayout />}>
+          <Route element={<StudentGuard />}>
+            <Route path="/dashboard" element={<StudentDashboard />} />
+          </Route>
+        </Route>
+
+        {/* 🔒 Admin Protected Routes - Double verified (session + role) */}
+        <Route path="/admin" element={<AdminGuard />}>
+          <Route element={<AdminLayout />}>
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="analytics" element={<Analytics />} />
+            <Route path="approvals" element={<Approvals />} />
+            <Route path="payments" element={<Payments />} />
+            <Route path="manage-live" element={<ManageLive />} />
+            <Route path="free-class" element={<ManageFreeClass />} />
+            <Route path="recordings" element={<ManageRecordings />} />
+            <Route path="announcements" element={<Announcements />} />
+            <Route path="schedule" element={<Schedule />} />
+            <Route path="tutes" element={<ManageTutes />} />
+            <Route path="catalog" element={<ManageCatalog />} />
+            <Route path="instructors" element={<ManageInstructors />} />
+            <Route path="settings" element={<ManageSettings />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>
