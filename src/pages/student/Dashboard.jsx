@@ -213,7 +213,7 @@ export default function Dashboard() {
   const [latestNoticeTitle, setLatestNoticeTitle] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [instituteSettings, setInstituteSettings] = useState(null);
-  const [lastReadCount, setLastReadCount] = useState(parseInt(localStorage.getItem('last_read_announcements') || '0'));
+  const [lastReadTime, setLastReadTime] = useState(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
   
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -232,21 +232,16 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  // Toast & Badge Notification Logic
+  // Toast & Badge Notification Logic (Timestamp Based)
   useEffect(() => {
     if (announcements.length > 0) {
-      // Safety: If count in DB decreased (deletes), reset lastRead to current total
-      if (announcements.length < lastReadCount) {
-          localStorage.setItem('last_read_announcements', announcements.length.toString());
-          setLastReadCount(announcements.length);
-      }
-
-      const unread = announcements.length - lastReadCount;
-      if (unread > 0) {
-          setNewNoticesCount(unread);
+      const unreadNotices = announcements.filter(n => new Date(n.created_at).getTime() > lastReadTime);
+      
+      if (unreadNotices.length > 0) {
+          setNewNoticesCount(unreadNotices.length);
           // Only show toast once for the latest one if we aren't already looking at them
           if (activeTab !== 'special_announce') {
-              setLatestNoticeTitle(announcements[0].title);
+              setLatestNoticeTitle(unreadNotices[0].title);
               setShowToast(true);
               const timer = setTimeout(() => setShowToast(false), 5000); // Hide toast after 5s
               return () => clearTimeout(timer);
@@ -254,20 +249,23 @@ export default function Dashboard() {
       } else {
           setNewNoticesCount(0);
       }
+    } else {
+        setNewNoticesCount(0);
     }
-  }, [announcements.length, lastReadCount, activeTab]);
+  }, [announcements, lastReadTime, activeTab]);
 
   // Mark as read after 3s on tab
   useEffect(() => {
     if (activeTab === 'special_announce' && announcements.length > 0) {
         const timer = setTimeout(() => {
-            localStorage.setItem('last_read_announcements', announcements.length.toString());
-            setLastReadCount(announcements.length);
+            const latestTime = new Date(announcements[0].created_at).getTime();
+            localStorage.setItem('last_read_notices_time', latestTime.toString());
+            setLastReadTime(latestTime);
             setNewNoticesCount(0);
         }, 3000);
         return () => clearTimeout(timer);
     }
-  }, [activeTab, announcements.length]);
+  }, [activeTab, announcements]);
 
   // Handle Browser Back Button for Modal
   useEffect(() => {
