@@ -112,9 +112,9 @@ export default function Analytics() {
                 setMonthlyData(recentMonths);
 
                 setStats({
-                    totalRevenue,
-                    totalCommissions,
-                    netProfit: totalRevenue - totalCommissions,
+                    totalRevenue, // Student Collections (Volume)
+                    totalCommissions, // Platform Earnings (Actual Profit)
+                    netProfit: totalCommissions, 
                     activeStudents: studentsCount || 0,
                     pendingApprovals: (pendingEnrollments || 0) + (pendingTutes || 0),
                     totalClasses: classesCount || 0
