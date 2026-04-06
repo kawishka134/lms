@@ -20,13 +20,39 @@ export default function Announcements() {
   const [selectedGrades, setSelectedGrades] = useState([]);
   const [selectedSubjects, setSelectedSubjects] = useState([]);
 
-  const availableGrades = ['Grade 10', 'Grade 11', 'Grade 12', 'Grade 13'];
-  const availableSubjects = ['O/L Commerce', 'A/L Economics', 'A/L Business Studies'];
+  const [availGrades, setAvailGrades] = useState([]);
+  const [availSubjects, setAvailSubjects] = useState([]);
 
   const fetchAnnouncements = async () => {
-       const { data } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+       const adminRole = localStorage.getItem('admin_role');
+       const instructorId = localStorage.getItem('instructor_id');
+
+       // 1. Fetch Notice History
+       let query = supabase.from('announcements').select('*').order('created_at', { ascending: false });
+       if (adminRole === 'instructor') {
+           query = query.eq('instructor_id', instructorId);
+       }
+       const { data } = await query;
        if(data) setAnnouncements(data);
-  };
+
+        // 2. Fetch Dynamic Options (Grades & Subjects) for this user
+        let courseQuery = supabase.from('courses').select('year, subject');
+        if (adminRole === 'instructor') {
+            courseQuery = courseQuery.eq('instructor_id', instructorId);
+        }
+        
+        const { data: courses } = await courseQuery;
+        if (courses && courses.length > 0) {
+            const uniqueGrades = [...new Set(courses.map(c => c.year ? `Grade ${c.year}` : null).filter(Boolean))].sort();
+            const uniqueSubjects = [...new Set(courses.map(c => c.subject).filter(Boolean))].sort();
+            setAvailGrades(uniqueGrades);
+            setAvailSubjects(uniqueSubjects);
+        } else {
+            // Fallback defaults if no courses exist yet
+            setAvailGrades(['Grade 10', 'Grade 11', 'Grade 12', 'Grade 13']);
+            setAvailSubjects(['O/L Commerce', 'A/L Economics', 'A/L Business Studies']);
+        }
+   };
 
   useEffect(() => { fetchAnnouncements(); }, []);
 
@@ -57,10 +83,14 @@ export default function Announcements() {
           finalAudience = combinations.join(', ');
       }
 
+      const instructorId = localStorage.getItem('instructor_id');
+      const adminRole = localStorage.getItem('admin_role');
+
       const dataToSave = {
           title: formData.title,
           message: formData.message,
-          target_audience: finalAudience
+          target_audience: finalAudience,
+          instructor_id: adminRole === 'super_admin' ? null : instructorId
       };
 
       if (isEditing) {
@@ -158,7 +188,7 @@ export default function Announcements() {
                           <div>
                               <label className="input-label" style={{ marginBottom: '1rem' }}>Select Grades</label>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                  {availableGrades.map(g => (
+                                  {availGrades.map(g => (
                                       <button key={g} type="button" onClick={() => toggleGrade(g)} style={{ padding: '0.5rem 1rem', borderRadius: '999px', border: '1px solid var(--color-surface-border)', backgroundColor: selectedGrades.includes(g) ? 'var(--color-primary)' : 'white', color: selectedGrades.includes(g) ? 'white' : 'var(--color-text)', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>
                                           {g}
                                       </button>
@@ -168,7 +198,7 @@ export default function Announcements() {
                           <div>
                               <label className="input-label" style={{ marginBottom: '1rem' }}>Select Subjects (Optional)</label>
                               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                                  {availableSubjects.map(s => (
+                                  {availSubjects.map(s => (
                                       <button key={s} type="button" onClick={() => toggleSubject(s)} style={{ padding: '0.5rem 1rem', borderRadius: '999px', border: '1px solid var(--color-surface-border)', backgroundColor: selectedSubjects.includes(s) ? 'var(--color-info)' : 'white', color: selectedSubjects.includes(s) ? 'white' : 'var(--color-text)', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}>
                                           {s}
                                       </button>

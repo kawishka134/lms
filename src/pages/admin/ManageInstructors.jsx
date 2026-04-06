@@ -416,8 +416,29 @@ export default function ManageInstructors() {
                         </div>
 
                         <div>
-                            <label className="input-label" style={{ fontWeight: 800 }}>Subject Area</label>
-                            <input className="input-field" type="text" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. Physics, Commerce" />
+                            <label className="input-label" style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Subject Specialized (Multiple OK)</label>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '1rem' }}>
+                                {['Economics', 'Business Studies', 'Accounting', 'O/L Commerce', 'English', 'ICT', 'Physics', 'Chemistry', 'Biology', 'Combined Maths'].map(sub => {
+                                    const isSelected = formData.subject?.split(', ').includes(sub);
+                                    return (
+                                        <button 
+                                            key={sub}
+                                            type="button" 
+                                            onClick={() => {
+                                                const currentArray = formData.subject ? formData.subject.split(', ') : [];
+                                                const newArray = isSelected ? currentArray.filter(s => s !== sub) : [...currentArray, sub];
+                                                setFormData({ ...formData, subject: newArray.join(', ') });
+                                            }}
+                                            className={`btn ${isSelected ? 'btn-primary' : 'btn-outline'}`}
+                                            style={{ padding: '4px 12px', fontSize: '0.75rem', borderRadius: '20px' }}
+                                        >
+                                            {sub}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <input className="input-field" type="text" value={formData.subject} onChange={e => setFormData({...formData, subject: e.target.value})} style={{ marginBottom: 0 }} placeholder="Or type manually (e.g. History, Greek)" />
+                            <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Selected subjects will appear on the public expert profile.</p>
                         </div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>

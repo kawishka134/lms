@@ -598,12 +598,13 @@ ul {
     background: var(--color-surface);
     box-shadow: 0 -2px 15px rgba(0,0,0,0.1);
     z-index: 2000;
-    padding: 0.75rem 1rem;
+    z-index: 2000;
+    padding: 1rem 1.25rem 0.75rem; /* Increased top padding for badges */
     align-items: center;
     border-top: 1px solid var(--color-surface-border);
     justify-content: flex-start;
     overflow-x: auto;
-    overflow-y: hidden;
+    /* Removed overflow-y: hidden to prevent badge clipping */
     white-space: nowrap;
     gap: 1.5rem;
     -webkit-overflow-scrolling: touch;
