@@ -924,9 +924,41 @@ export default function Dashboard() {
                                     ) : enrollment.status === 'pending' ? (
                                         <button disabled className="btn btn-outline" style={{ width: '100%', opacity: 0.5 }}>Waiting for Approval</button>
                                     ) : (
-                                        <div style={{ textAlign: 'center', padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '8px', color: '#166534', fontWeight: 800, fontSize: '0.9rem' }}>
-                                            ✅ Access Unlocked
-                                            {enrollment.expires_at && <div style={{ fontSize: '0.7rem', fontWeight: 500 }}>Expires: {new Date(enrollment.expires_at).toLocaleDateString()}</div>}
+                                        <div style={{ textAlign: 'center', padding: '1rem', backgroundColor: '#f0fdf4', borderRadius: '16px', border: '1px solid #bbf7d0', boxShadow: 'inset 0 2px 4px rgba(34,197,94,0.05)' }}>
+                                            <div style={{ color: '#166534', fontWeight: 900, fontSize: '0.95rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                                <div style={{ width: '8px', height: '8px', background: '#22c55e', borderRadius: '50%', animation: 'pulse 2s infinite' }}></div> 
+                                                Access Active
+                                            </div>
+                                            {enrollment.expires_at && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                                    <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Access Ends In:</div>
+                                                    {(() => {
+                                                        const diff = new Date(enrollment.expires_at) - currentTime;
+                                                        if (diff <= 0) return <span style={{ color: '#ef4444', fontWeight: 900 }}>EXPIRED</span>;
+                                                        
+                                                        const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                                        const h = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                                                        const m = Math.floor((diff / 1000 / 60) % 60);
+                                                        const s = Math.floor((diff / 1000) % 60);
+                                                        
+                                                        return (
+                                                            <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', marginTop: '0.2rem' }}>
+                                                                {[
+                                                                    { label: 'D', val: d },
+                                                                    { label: 'H', val: h },
+                                                                    { label: 'M', val: m },
+                                                                    { label: 'S', val: s }
+                                                                ].map((unit, idx) => (
+                                                                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'white', padding: '0.2rem 0.5rem', borderRadius: '6px', minWidth: '32px', border: '1px solid #dcfce7' }}>
+                                                                        <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#14532d' }}>{String(unit.val).padStart(2, '0')}</span>
+                                                                        <span style={{ fontSize: '0.5rem', fontWeight: 800, color: '#16a34a' }}>{unit.label}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

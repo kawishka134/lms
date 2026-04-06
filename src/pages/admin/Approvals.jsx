@@ -147,15 +147,23 @@ export default function Approvals() {
         }
         */
 
-        if (table === 'instructor_payments' && newStatus === 'approved') {
+        if (table === 'instructor_payments') {
             const { data: payRecord } = await supabase.from('instructor_payments').select('instructor_id').eq('id', id).single();
             if (payRecord?.instructor_id) {
-                const newExpiry = new Date();
-                newExpiry.setDate(newExpiry.getDate() + 31);
-                await supabase.from('instructors').update({ 
-                    access_expiry_date: newExpiry.toISOString(),
-                    commission_status: 'Paid'
-                }).eq('id', payRecord.instructor_id);
+                if (newStatus === 'approved') {
+                    const newExpiry = new Date();
+                    newExpiry.setDate(newExpiry.getDate() + 31);
+                    await supabase.from('instructors').update({ 
+                        access_expiry_date: newExpiry.toISOString(),
+                        commission_status: 'Paid'
+                    }).eq('id', payRecord.instructor_id);
+                } else {
+                    // Revoke access if status changed to pending or rejected
+                    await supabase.from('instructors').update({ 
+                        access_expiry_date: new Date(0).toISOString(), // Expire immediately
+                        commission_status: 'Pending'
+                    }).eq('id', payRecord.instructor_id);
+                }
             }
         }
 
@@ -418,9 +426,14 @@ export default function Approvals() {
                               </td>
                               <td style={{ padding: '1rem 1.25rem' }}><span className="badge" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>PAID / UNLOCKED</span></td>
                               <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                                  <button onClick={() => handleAction('instructor_payments', s.id, 'pending')} className="btn btn-outline" style={{ color: '#666', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
-                                      <RotateCcw size={14} style={{ marginRight: '6px' }} /> Reset Status
-                                  </button>
+                                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                      <button onClick={() => handleAction('instructor_payments', s.id, 'pending')} className="btn btn-outline" style={{ color: '#64748b', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                          <RotateCcw size={14} /> Reset
+                                      </button>
+                                      <button onClick={() => handleAction('instructor_payments', s.id, 'rejected')} className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#fee2e2', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                          <XCircle size={14} /> Revoke & Lock
+                                      </button>
+                                  </div>
                               </td>
                           </tr>
                       ))}

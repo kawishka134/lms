@@ -4,7 +4,9 @@ import { TrendingUp, Users, DollarSign, Video, FileText, PieChart, Activity, Che
 
 export default function Analytics() {
     const [stats, setStats] = useState({
-        totalRevenue: 0,
+        totalRevenue: 0, 
+        totalCommissions: 0,
+        netProfit: 0,
         activeStudents: 0,
         pendingApprovals: 0,
         totalClasses: 0
@@ -35,6 +37,7 @@ export default function Analytics() {
                 const { data: approvedCommissions } = await supabase.from('instructor_payments').select('created_at, amount, instructors(name)').eq('status', 'approved');
                 
                 let totalRevenue = 0;
+                let totalCommissions = 0;
                 let monthlyMap = {}; // Format: { "YYYY-MM": amount }
                 let classCountMap = {}; // Format: { "Course Title": count }
 
@@ -43,7 +46,6 @@ export default function Analytics() {
                         let amount = 0;
                         const courseTitle = e.courses?.title || 'Unknown Course';
                         
-                        // Parse price string to number
                         if(e.courses && e.courses.price) {
                             const match = String(e.courses.price).match(/\d+/g);
                             if(match) amount = parseInt(match.join(''));
@@ -51,17 +53,15 @@ export default function Analytics() {
                         
                         totalRevenue += amount;
 
-                        // Add to monthly map
                         const dateObj = new Date(e.created_at);
                         const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
                         const monthLabel = dateObj.toLocaleString('en-US', { month: 'short' });
                         
                         if (!monthlyMap[monthKey]) {
-                            monthlyMap[monthKey] = { label: monthLabel, amount: 0, sortKey: monthKey };
+                            monthlyMap[monthKey] = { label: monthLabel, income: 0, expense: 0, sortKey: monthKey };
                         }
-                        monthlyMap[monthKey].amount += amount;
+                        monthlyMap[monthKey].income += amount;
 
-                        // Add to class popularity mapping
                         classCountMap[courseTitle] = (classCountMap[courseTitle] || 0) + 1;
                     });
                 }
@@ -69,34 +69,37 @@ export default function Analytics() {
                 if (approvedCommissions) {
                     approvedCommissions.forEach(c => {
                         const amount = Number(c.amount) || 0;
-                        totalRevenue += amount;
+                        totalCommissions += amount;
                         
                         const dateObj = new Date(c.created_at);
                         const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
                         const monthLabel = dateObj.toLocaleString('en-US', { month: 'short' });
                         
                         if (!monthlyMap[monthKey]) {
-                            monthlyMap[monthKey] = { label: monthLabel, amount: 0, sortKey: monthKey };
+                            monthlyMap[monthKey] = { label: monthLabel, income: 0, expense: 0, sortKey: monthKey };
                         }
-                        monthlyMap[monthKey].amount += amount;
+                        monthlyMap[monthKey].expense += amount;
                     });
                 }
                 
-                // Convert maps to arrays
                 const recentMonths = Object.values(monthlyMap)
                     .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-                    .slice(-5) // Get last 5 months
-                    .map(item => ({ month: item.label, amount: item.amount }));
+                    .slice(-6) 
+                    .map(item => ({ 
+                        month: item.label, 
+                        income: item.income, 
+                        expense: item.expense,
+                        net: item.income - item.expense 
+                    }));
 
-                // Ensure at least some empty months if data is too small to prevent UI breaking
                 if (recentMonths.length === 0) {
-                     recentMonths.push({ month: 'N/A', amount: 0 });
+                     recentMonths.push({ month: 'N/A', income: 0, expense: 0, net: 0 });
                 }
 
                 const topClasses = Object.entries(classCountMap)
                     .map(([name, count]) => ({ name, students: count }))
                     .sort((a, b) => b.students - a.students)
-                    .slice(0, 3); // Get top 3
+                    .slice(0, 3); 
 
                 const highestStudentCount = topClasses.length > 0 ? topClasses[0].students : 1;
                 
@@ -110,6 +113,8 @@ export default function Analytics() {
 
                 setStats({
                     totalRevenue,
+                    totalCommissions,
+                    netProfit: totalRevenue - totalCommissions,
                     activeStudents: studentsCount || 0,
                     pendingApprovals: (pendingEnrollments || 0) + (pendingTutes || 0),
                     totalClasses: classesCount || 0
@@ -124,36 +129,63 @@ export default function Analytics() {
     }, []);
 
     const downloadCSV = async () => {
+        const adminRole = localStorage.getItem('admin_role');
+        const currentInstructorId = localStorage.getItem('instructor_id');
+        
+        if (adminRole !== 'super_admin' && adminRole !== 'instructor') {
+            alert("⚠️ You do not have permission to download reports.");
+            return;
+        }
+
         try {
             setIsLoading(true);
-            const { data } = await supabase
+            
+            // Build query for enrollments
+            let enrollmentQuery = supabase
                 .from('enrollments')
-                .select('created_at, courses(title, price), profiles(full_name, nic, phone)')
-                .eq('status', 'approved');
-                
-            const { data: commissionData } = await supabase
-                .from('instructor_payments')
-                .select('created_at, amount, instructors(name)')
+                .select('created_at, courses(title, price, instructor_id), profiles(full_name, nic, phone)')
                 .eq('status', 'approved');
             
+            // If instructor, filter ONLY their own courses
+            if (adminRole === 'instructor' && currentInstructorId) {
+                enrollmentQuery = enrollmentQuery.filter('courses.instructor_id', 'eq', currentInstructorId);
+            }
+
+            const { data } = await enrollmentQuery;
+                
+            // Fetch commission records (Only super admin sees these usually, or instructor sees only their own)
+            let commQuery = supabase
+                .from('instructor_payments')
+                .select('created_at, amount, instructors(name, id)')
+                .eq('status', 'approved');
+            
+            if (adminRole === 'instructor' && currentInstructorId) {
+                commQuery = commQuery.eq('instructor_id', currentInstructorId);
+            }
+
+            const { data: commissionData } = await commQuery;
+            
             if ((!data || data.length === 0) && (!commissionData || commissionData.length === 0)) {
-                alert("No payment data found.");
+                alert("No payment data found for your account.");
                 setIsLoading(false);
                 return;
             }
 
-            let csvContent = "Date,User / Student Name,NIC,Phone,Course Name / Payment Type,Amount\n";
+            let csvContent = "Date,Type,Name/Entity,NIC/ID,Ref,Amount (Rs.),Status\n";
 
             if (data) {
                 data.forEach(item => {
                     const date = new Date(item.created_at).toLocaleDateString();
                     const studentName = item.profiles?.full_name || 'N/A';
                     const nic = item.profiles?.nic || 'N/A';
-                    const phone = item.profiles?.phone || 'N/A';
-                    const course = item.courses?.title || 'Student Monthly Payment';
-                    const amount = item.courses?.price ? String(item.courses.price).replace(/,/g, '') : '0';
+                    const course = item.courses?.title || 'Course Payment';
+                    let amount = 0;
+                    if(item.courses && item.courses.price) {
+                        const match = String(item.courses.price).match(/\d+/g);
+                        if(match) amount = parseInt(match.join(''));
+                    }
                     
-                    csvContent += `"${date}","${studentName}","${nic}","${phone}","${course}","${amount}"\n`;
+                    csvContent += `"${date}","Student Collection","${studentName}","${nic}","${course}","${amount}","Approved"\n`;
                 });
             }
             
@@ -163,7 +195,7 @@ export default function Analytics() {
                     const instructorName = item.instructors?.name || 'N/A';
                     const amount = item.amount || '0';
                     
-                    csvContent += `"${date}","${instructorName}","N/A","N/A","Instructor Commission","${amount}"\n`;
+                    csvContent += `"${date}","Platform Profit","${instructorName}","N/A","Instructor-to-Owner Comm.","${amount}","Received"\n`;
                 });
             }
 
@@ -210,63 +242,73 @@ export default function Analytics() {
             </div>
 
             {/* Top Stat Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
                 <div className="card hover-glow" style={{ borderLeft: '6px solid #10b981' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase' }}>Total Revenue</span>
-                         <div style={{ padding: '8px', background: '#dcfce7', borderRadius: '8px', color: '#10b981' }}><DollarSign size={20} /></div>
+                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Student Collections</span>
+                         <div style={{ padding: '8px', background: '#dcfce7', borderRadius: '8px', color: '#10b981' }}><TrendingUp size={18} /></div>
                     </div>
-                    <h2 style={{ fontSize: '2.5rem', margin: 0, fontWeight: 900, color: '#064e3b' }}>Rs. {stats.totalRevenue.toLocaleString()}</h2>
-                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
-                       <TrendingUp size={14} /> +12% from last month
-                    </p>
+                    <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900, color: '#064e3b' }}>Rs. {stats.totalRevenue.toLocaleString()}</h2>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Directly to instructors</p>
                 </div>
 
-                <div className="card hover-glow" style={{ borderLeft: '6px solid var(--color-primary)' }}>
+                <div className="card hover-glow" style={{ borderLeft: '6px solid #ef4444' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase' }}>Active Students</span>
-                         <div style={{ padding: '8px', background: 'var(--color-primary-light)', borderRadius: '8px', color: 'var(--color-primary)' }}><Users size={20} /></div>
+                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Platform Earnings</span>
+                         <div style={{ padding: '8px', background: '#fee2e2', borderRadius: '8px', color: '#ef4444' }}><DollarSign size={18} /></div>
                     </div>
-                    <h2 style={{ fontSize: '2.5rem', margin: 0, fontWeight: 900 }}>{stats.activeStudents}</h2>
-                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Total registered on platform</p>
+                    <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900, color: '#991b1b' }}>Rs. {stats.totalCommissions.toLocaleString()}</h2>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Commission from instructors</p>
+                </div>
+
+                <div className="card hover-glow" style={{ borderLeft: '6px solid #0ea5e9' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Net Profit</span>
+                         <div style={{ padding: '8px', background: '#e0f2fe', borderRadius: '8px', color: '#0ea5e9' }}><DollarSign size={18} /></div>
+                    </div>
+                    <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900, color: '#0369a1' }}>Rs. {stats.netProfit.toLocaleString()}</h2>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: '#0369a1', fontWeight: 800 }}>Final Platform Balance</p>
                 </div>
 
                 <div className="card hover-glow" style={{ borderLeft: '6px solid #f59e0b' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.85rem', textTransform: 'uppercase' }}>Pending Approvals</span>
-                         <div style={{ padding: '8px', background: '#fef3c7', borderRadius: '8px', color: '#f59e0b' }}><Clock size={20} /></div>
+                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Pending Items</span>
+                         <div style={{ padding: '8px', background: '#fef3c7', borderRadius: '8px', color: '#f59e0b' }}><Clock size={18} /></div>
                     </div>
-                    <h2 style={{ fontSize: '2.5rem', margin: 0, fontWeight: 900 }}>{stats.pendingApprovals}</h2>
-                    <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#b45309' }}>Requires your attention</p>
+                    <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900 }}>{stats.pendingApprovals}</h2>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: '#b45309' }}>Waitings approvals</p>
                 </div>
             </div>
 
             {/* Income Chart */}
             <div className="card" style={{ marginBottom: '2rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem' }}>Monthly Revenue (Last 5 Months)</h3>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem' }}>Income vs Expenses (Last 6 Months)</h3>
                 
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '5%', height: '250px', padding: '0 1rem', borderBottom: '1px solid var(--color-surface-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3%', height: '280px', padding: '0 1rem', borderBottom: '1px solid var(--color-surface-border)', overflowX: 'auto' }}>
                     {monthlyData.map((data, index) => {
-                        const heightPercent = (data.amount / maxAmount) * 100;
+                        const maxVal = Math.max(...monthlyData.map(d => Math.max(d.income, d.expense, 1)));
+                        const incomeH = (data.income / maxVal) * 100;
+                        const expenseH = (data.expense / maxVal) * 100;
                         return (
-                            <div key={index} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%', group: 'hover' }}>
-                                <div style={{ 
-                                    width: '100%', 
-                                    maxWidth: '60px', 
-                                    height: `${heightPercent}%`, 
-                                    backgroundColor: 'var(--color-primary)', 
-                                    borderRadius: '8px 8px 0 0',
-                                    transition: 'all 0.3s ease',
-                                    position: 'relative'
-                                }}>
-                                    <div style={{ position: 'absolute', top: '-30px', left: '50%', transform: 'translateX(-50%)', backgroundColor: '#1e293b', color: 'white', padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold', opacity: 0.8, whiteSpace: 'nowrap' }}>
-                                        Rs. {data.amount.toLocaleString()}
+                            <div key={index} style={{ flex: 1, minWidth: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', width: '100%', justifyContent: 'center' }}>
+                                    {/* Income Bar */}
+                                    <div style={{ width: '20px', height: `${incomeH}%`, backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', position: 'relative' }}>
+                                        {incomeH > 10 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#064e3b' }}>{data.income > 1000 ? (data.income/1000).toFixed(1)+'k' : data.income}</div>}
+                                    </div>
+                                    {/* Expense Bar */}
+                                    <div style={{ width: '20px', height: `${expenseH}%`, backgroundColor: '#ef4444', borderRadius: '4px 4px 0 0', position: 'relative' }}>
+                                        {expenseH > 10 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#991b1b' }}>{data.expense > 1000 ? (data.expense/1000).toFixed(1)+'k' : data.expense}</div>}
                                     </div>
                                 </div>
-                                <div style={{ marginTop: '1rem', fontWeight: 700, color: 'var(--color-text-muted)' }}>{data.month}</div>
+                                <div style={{ marginTop: '1rem', fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{data.month}</div>
                             </div>
                         );
                     })}
+                </div>
+                <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem', padding: '0 1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700 }}><div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div> Student Income</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700 }}><div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div> Instructor Commissions</div>
                 </div>
             </div>
 
