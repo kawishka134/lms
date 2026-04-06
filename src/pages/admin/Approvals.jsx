@@ -95,6 +95,7 @@ export default function Approvals() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchSlips())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchSlips())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchSlips())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'instructor_payments' }, () => fetchSlips())
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, []);

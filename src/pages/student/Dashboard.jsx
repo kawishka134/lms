@@ -352,8 +352,17 @@ export default function Dashboard() {
          } catch(e) { console.error(e) }
      };
      fetchData();
-     const channel = supabase.channel('dashboard_sync').on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData()).subscribe();
-     return () => { isMounted = false; supabase.removeChannel(channel); }
+      const channel = supabase.channel('dashboard_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'schedules' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'free_classes' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'recordings' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchData())
+        .subscribe();
+      return () => { isMounted = false; supabase.removeChannel(channel); }
   }, [studentProfile?.id]);
 
   const handleUploadSubmit = async (e) => {
