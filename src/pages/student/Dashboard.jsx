@@ -954,15 +954,30 @@ export default function Dashboard() {
               <aside className="dashboard-sidebar card glass" style={{ margin: '0 0.5rem 0 0', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   <h2 style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase', padding: '0.5rem 1rem' }}>Menu</h2>
                   {sections.map(s => (
-                      <button key={s.id} onClick={() => setActiveTab(s.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '1rem 1.2rem', borderRadius: '12px', border: 'none', background: activeTab === s.id ? 'var(--color-primary-light)' : 'transparent', color: activeTab === s.id ? 'var(--color-primary)' : 'inherit', fontWeight: activeTab === s.id ? 900 : 500, cursor: 'pointer', textAlign: 'left', fontSize: '0.95rem' }}>
-                          {s.icon} <span className="sidebar-label">{s.label}</span>
+                      <button key={s.id} onClick={() => setActiveTab(s.id)} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '0.75rem', width: '100%', padding: '1rem 1.2rem', borderRadius: '12px', border: 'none', background: activeTab === s.id ? 'var(--color-primary-light)' : 'transparent', color: activeTab === s.id ? 'var(--color-primary)' : 'inherit', fontWeight: activeTab === s.id ? 900 : 500, cursor: 'pointer', textAlign: 'left', fontSize: '0.95rem' }}>
+                          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {s.icon}
+                            {s.id === 'special_announce' && announcements.length > 0 && (
+                                <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#ef4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, border: '2px solid white', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)' }}>
+                                    {announcements.length}
+                                </span>
+                            )}
+                          </span>
+                          <span className="sidebar-label">{s.label}</span>
                       </button>
                   ))}
                   <button onClick={handleLogout} style={{ marginTop: 'auto', background: 'none', border: 'none', padding: '1rem', color: 'var(--color-danger)', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><LogOut size={18} /> Logout</button>
               </aside>
               <main className="dashboard-main" style={{ flex: 1, padding: '0 1rem' }}>
                   <div style={{ position: 'sticky', top: 0, background: 'var(--color-bg)', backdropFilter: 'blur(10px)', padding: '1rem 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', zIndex: 50, marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
-                      <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0 }}>{sections.find(s => s.id === activeTab)?.label}</h2>
+                      <h2 style={{ fontSize: '1.8rem', fontWeight: 900, margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        {sections.find(s => s.id === activeTab)?.label}
+                        {activeTab === 'special_announce' && announcements.length > 0 && (
+                            <span className="glass-premium" style={{ fontSize: '0.85rem', padding: '0.25rem 0.75rem', borderRadius: '12px', backgroundColor: '#ef4444', color: 'white', fontWeight: 800, boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)' }}>
+                              {announcements.length} New
+                            </span>
+                        )}
+                      </h2>
                       {(activeTab === 'free_class' || activeTab === 'recordings') && <input placeholder="Search..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ padding: '0.6rem 1.2rem', borderRadius: '50px', border: '1px solid var(--color-surface-border)' }} />}
                   </div>
                   <div style={{ paddingBottom: '12rem' }}>{renderContent()}</div>
@@ -977,9 +992,20 @@ export default function Dashboard() {
               { id: 'live_today', label: 'Live', icon: <Clock size={20} /> },
               { id: 'class_schedule', label: 'Schedule', icon: <Calendar size={20} /> },
               { id: 'tute_pdf', label: 'Tutes', icon: <FileText size={20} /> },
+              { id: 'special_announce', label: 'Notices', icon: <Megaphone size={20} /> },
               { id: 'about_me', label: 'Me', icon: <UserCircle size={20} /> }
           ].map(s => (
-              <button key={s.id} onClick={() => setActiveTab(s.id)} className={`nav-item-mobile ${activeTab === s.id ? 'active' : ''}`}>{s.icon} <span>{s.label}</span></button>
+              <button key={s.id} onClick={() => setActiveTab(s.id)} className={`nav-item-mobile ${activeTab === s.id ? 'active' : ''}`} style={{ position: 'relative' }}>
+                  <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {s.icon}
+                    {s.id === 'special_announce' && announcements.length > 0 && (
+                        <span style={{ position: 'absolute', top: '-5px', right: '-5px', background: '#ef4444', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '0.65rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, border: '2px solid white', boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)' }}>
+                            {announcements.length}
+                        </span>
+                    )}
+                  </div>
+                  <span>{s.label}</span>
+              </button>
           ))}
       </nav>
       {showUploadModal && (

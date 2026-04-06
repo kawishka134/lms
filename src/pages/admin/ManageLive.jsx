@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Video, Clock, Save, Link as LinkIcon, Youtube, Search, CheckCircle, PlusCircle, Trash2, ArrowUpRight, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function ManageLive() {
   const [activeTab, setActiveTab] = useState('add'); 
   const [isPublishing, setIsPublishing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [successMsg, setSuccessMsg] = useState('');
   const [activeSessions, setActiveSessions] = useState([]);
+  const { showToast } = useToast();
 
   // Transition Modal States
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -49,19 +50,19 @@ export default function ManageLive() {
       if (isEditing) {
           const { error } = await supabase.from('live_sessions').update(dataToSave).eq('id', editingId);
           if (!error) {
-              setSuccessMsg('Live session link broadcast updated!');
+              showToast('Live session link broadcast updated!');
               setIsEditing(false);
               setEditingId(null);
-          } else { alert("Error updating: " + error.message); }
+          } else { showToast("Error updating: " + error.message, 'error'); }
       } else {
           const { error } = await supabase.from('live_sessions').insert(dataToSave);
-          if (!error) setSuccessMsg('Live session link broadcasted!');
-          else { alert("Error publishing: " + error.message); }
+          if (!error) showToast('Live session link broadcasted!');
+          else { showToast("Error publishing: " + error.message, 'error'); }
       }
 
       fetchSessions();
       setFormData({...formData, title: '', zoomLink: '', youtubeLink: ''});
-      setTimeout(() => { setSuccessMsg(''); setActiveTab('history'); }, 2000);
+      setTimeout(() => { setActiveTab('history'); }, 1000);
       setIsPublishing(false);
   };
 
@@ -105,12 +106,12 @@ export default function ManageLive() {
           // 3. Delete from Live
           await supabase.from('live_sessions').delete().eq('id', targetSession.id);
           
-          setSuccessMsg("Session successfully moved to Recordings!");
+          showToast("Session successfully moved to Recordings!");
           setShowMoveModal(false);
           setMoveYtLink('');
           fetchSessions();
       } catch(err) {
-          alert("Error moving: " + err.message);
+          showToast("Error moving: " + err.message, 'error');
       } finally { setIsMoving(false); }
   };
 
@@ -126,7 +127,7 @@ export default function ManageLive() {
       yesterday.setDate(yesterday.getDate() - 1);
       await supabase.from('live_sessions').delete().lt('created_at', yesterday.toISOString());
       fetchSessions();
-      alert("Cleaned up old links!");
+      showToast("Cleaned up old links!", 'warning');
   };
   const parseZoomInvite = (text) => {
       if (!text) return;
@@ -158,7 +159,6 @@ export default function ManageLive() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '1rem' }}>
               <Video size={24} color="var(--color-primary)" /> {isEditing ? 'Update Broadcast Stream' : 'Configure Stream Link'}
           </h2>
-          {successMsg && <div style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontWeight: 600 }}>{successMsg}</div>}
           <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
               <div style={{ gridColumn: '1 / -1' }}>
                   <label className="input-label" style={{ color: 'var(--color-primary)', fontWeight: 800 }}>Smart Paste (Paste Zoom Invite Text Here)</label>

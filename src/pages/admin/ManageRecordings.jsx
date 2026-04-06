@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Video, Save, Trash2, CheckCircle, PlusCircle, Users, Youtube } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function ManageRecordings() {
   const [activeTab, setActiveTab] = useState('add');
   const [isPublishing, setIsPublishing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [successMsg, setSuccessMsg] = useState('');
   const [recordings, setRecordings] = useState([]);
+  const { showToast } = useToast();
   const [requests, setRequests] = useState([]);
 
   const [formData, setFormData] = useState({
@@ -88,21 +89,21 @@ export default function ManageRecordings() {
       if (isEditing) {
           const { error } = await supabase.from('recordings').update(dataToSave).eq('id', editingId);
           if (!error) {
-              setSuccessMsg('Recording updated successfully!');
+              showToast('Recording updated successfully!');
               setIsEditing(false);
               setEditingId(null);
-          } else { alert("Error: " + error.message); }
+          } else { showToast("Error updating: " + error.message, 'error'); }
       } else {
           const { error } = await supabase.from('recordings').insert(dataToSave);
-          if (!error) setSuccessMsg('Recording successfully pushed!');
-          else { alert("Error: " + error.message); }
+          if (!error) showToast('Recording successfully pushed!');
+          else { showToast("Error publishing: " + error.message, 'error'); }
       }
 
       fetchRecordings();
       setFormData({title: '', description: '', youtubeLink: '', audienceType: 'All Students'}); 
       setSelectedGrades([]);
       setSelectedSubjects([]);
-      setTimeout(() => { setSuccessMsg(''); setActiveTab('history'); }, 2000);
+      setTimeout(() => { setActiveTab('history'); }, 1000);
       setIsPublishing(false);
   };
 
@@ -177,12 +178,6 @@ export default function ManageRecordings() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '1rem' }}>
               <Video size={24} color="var(--color-primary)" /> {isEditing ? 'Edit Recording Metadata' : 'Publish Past Class Video'}
           </h2>
-
-          {successMsg && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontWeight: 600 }}>
-                  <CheckCircle size={20} /> {successMsg}
-              </div>
-          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ backgroundColor: 'rgba(255, 0, 0, 0.05)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px dashed #ff0000' }}>
@@ -292,6 +287,7 @@ export default function ManageRecordings() {
                                                 approved_at: now.toISOString(),
                                                 expires_at: expiry.toISOString()
                                             }).eq('id', req.id);
+                                            showToast(`Access granted for ${req.profiles?.full_name}`);
                                             fetchRequests();
                                         }} 
                                         className="btn btn-primary" style={{ padding: '0.5rem 1.25rem' }}
@@ -301,6 +297,7 @@ export default function ManageRecordings() {
                                 <button 
                                     onClick={async () => {
                                         await supabase.from('recording_access_requests').update({ status: 'rejected' }).eq('id', req.id);
+                                        showToast('Request rejected.', 'warning');
                                         fetchRequests();
                                     }} 
                                     className="btn btn-outline" style={{ color: 'var(--color-danger)' }}

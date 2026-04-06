@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { createClient } from '@supabase/supabase-js';
-import { Plus, Edit2, Trash2, X, Users, Upload, Clock, AlertTriangle, CheckCircle, Lock, Eye, EyeOff, Key } from 'lucide-react';
+import { Plus, Edit2, Trash2, X, Users, Upload, Clock, AlertTriangle, CheckCircle, Lock, Eye, EyeOff, Key, UserCheck } from 'lucide-react';
+import { useToast } from '../../components/Toast';
 
 const adminAuthClient = createClient(
   import.meta.env.VITE_SUPABASE_URL,
@@ -16,6 +17,7 @@ export default function ManageInstructors() {
   const [editingInstructor, setEditingInstructor] = useState(null);
   const [showPasswordMap, setShowPasswordMap] = useState({}); // Card visibility
   const [showModalPassword, setShowModalPassword] = useState(false); // Modal visibility
+  const { showToast } = useToast();
   
   const [formData, setFormData] = useState({
     name: '',
@@ -117,8 +119,9 @@ export default function ManageInstructors() {
         .getPublicUrl(filePath);
 
       setFormData({ ...formData, photo_url: data.publicUrl });
+      showToast('Image uploaded successfully!');
     } catch (error) {
-      alert('Error uploading image!');
+      showToast('Error uploading image!', 'error');
       console.error(error);
     } finally {
       setUploading(false);
@@ -129,7 +132,7 @@ export default function ManageInstructors() {
     e.preventDefault();
     try {
       if (!editingInstructor && !formData.new_password) {
-          alert("Please provide a password for new instructors.");
+          showToast("Please provide a password for new instructors.", 'error');
           return;
       }
 
@@ -170,11 +173,12 @@ export default function ManageInstructors() {
           .from('instructors')
           .insert([saveData]);
         if (error) throw error;
+        showToast('New Instructor profile created!');
       }
       handleCloseModal();
       fetchInstructors();
     } catch (error) {
-      alert('Error saving instructor: ' + error.message);
+      showToast('Error saving instructor: ' + error.message, 'error');
       console.error(error);
     }
   };
@@ -189,10 +193,10 @@ export default function ManageInstructors() {
                 .eq('id', instructor.id);
             
             if (error) throw error;
-            alert(`Instructor "${instructor.name}" has been ${action}ed.`);
+            showToast(`Instructor "${instructor.name}" has been ${action}ed.`, 'warning');
             fetchInstructors();
         } catch (err) {
-            alert("Action failed: " + err.message);
+            showToast("Action failed: " + err.message, 'error');
         }
     }
   };
@@ -208,10 +212,10 @@ export default function ManageInstructors() {
       
       if (dbError && rpcError) throw dbError;
       
-      alert(`Account for "${instructor.name}" has been permanently removed.`);
+      showToast(`Account for "${instructor.name}" has been permanently removed.`, 'warning');
       fetchInstructors();
     } catch (error) {
-      alert("Delete failed: " + error.message);
+      showToast("Delete failed: " + error.message, 'error');
       console.error(error);
     }
   };
@@ -239,10 +243,10 @@ export default function ManageInstructors() {
               .eq('id', instructor.id);
 
           if (error) throw error;
-          alert("New password approved and active! (via DB Link)");
+          showToast("New password approved correctly!");
           fetchInstructors();
       } catch (err) {
-          alert("Approval failed: " + err.message);
+          showToast("Approval failed: " + err.message, 'error');
           console.error(err);
       }
   };

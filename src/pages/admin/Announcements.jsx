@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Megaphone, Save, Trash2, Search, CheckCircle, PlusCircle, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function Announcements() {
   const [activeTab, setActiveTab] = useState('add');
   const [isPublishing, setIsPublishing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [successMsg, setSuccessMsg] = useState('');
   const [announcements, setAnnouncements] = useState([]);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
       title: '',
@@ -65,21 +66,21 @@ export default function Announcements() {
       if (isEditing) {
           const { error } = await supabase.from('announcements').update(dataToSave).eq('id', editingId);
           if (!error) {
-              setSuccessMsg('Announcement updated successfully!');
+              showToast('Announcement updated successfully!');
               setIsEditing(false);
               setEditingId(null);
-          } else { alert("Error updating: " + error.message); }
+          } else { showToast("Error updating: " + error.message, 'error'); }
       } else {
           const { error } = await supabase.from('announcements').insert(dataToSave);
-          if (!error) setSuccessMsg('Broadcasted cleanly to selected desks!');
-          else { alert("Error publishing: " + error.message); }
+          if (!error) showToast('Broadcasted cleanly to selected desks!');
+          else { showToast("Error publishing: " + error.message, 'error'); }
       }
 
       fetchAnnouncements();
       setFormData({title: '', message: '', audienceType: 'All Students'}); 
       setSelectedGrades([]);
       setSelectedSubjects([]);
-      setTimeout(() => { setSuccessMsg(''); setActiveTab('history'); }, 2000);
+      setTimeout(() => { setActiveTab('history'); }, 1000);
       setIsPublishing(false);
   };
 
@@ -124,12 +125,6 @@ export default function Announcements() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '1rem' }}>
               <Megaphone size={24} color="var(--color-primary)" /> {isEditing ? 'Edit Existing Notice' : 'Broadcast New Notice'}
           </h2>
-
-          {successMsg && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontWeight: 600 }}>
-                  <CheckCircle size={20} /> {successMsg}
-              </div>
-          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div>

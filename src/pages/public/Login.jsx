@@ -85,6 +85,7 @@ export default function Login() {
           }
       }
       
+      showToast('Log in Successful! Welcome back.', 'success');
       navigate('/dashboard');
 
     } catch (err) {

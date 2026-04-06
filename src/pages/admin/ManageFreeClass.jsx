@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import { PlayCircle, Save, Trash2, CheckCircle, PlusCircle, Users, Video, Youtube } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function ManageFreeClass() {
   const [activeTab, setActiveTab] = useState('add');
   const [isPublishing, setIsPublishing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [successMsg, setSuccessMsg] = useState('');
   const [freeClasses, setFreeClasses] = useState([]);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
       title: '',
@@ -74,21 +75,21 @@ export default function ManageFreeClass() {
       if (isEditing) {
           const { error } = await supabase.from('free_classes').update(dataToSave).eq('id', editingId);
           if (!error) {
-              setSuccessMsg('Free class updated successfully!');
+              showToast('Free class updated successfully!');
               setIsEditing(false);
               setEditingId(null);
-          } else { alert("Error: " + error.message); }
+          } else { showToast("Error: " + error.message, 'error'); }
       } else {
           const { error } = await supabase.from('free_classes').insert(dataToSave);
-          if (!error) setSuccessMsg('Free class published!');
-          else { alert("Error: " + error.message); }
+          if (!error) showToast('Free class published!');
+          else { showToast("Error: " + error.message, 'error'); }
       }
 
       fetchFreeClasses();
       setFormData({title: '', description: '', zoomLink: '', youtubeLink: '', date: '', time: '', isLive: false, expiresAt: null, audienceType: 'All Students'}); 
       setSelectedGrades([]);
       setSelectedSubjects([]);
-      setTimeout(() => { setSuccessMsg(''); setActiveTab('history'); }, 2000);
+      setTimeout(() => { setActiveTab('history'); }, 1000);
       setIsPublishing(false);
   };
 
@@ -113,6 +114,7 @@ export default function ManageFreeClass() {
   const handleDelete = async (id) => {
       if(window.confirm('Delete this Free Class permanently?')) {
           await supabase.from('free_classes').delete().eq('id', id);
+          showToast('Free class removed.', 'warning');
           fetchFreeClasses();
       }
   };
@@ -229,8 +231,8 @@ export default function ManageFreeClass() {
                                           } catch(err) {}
 
                                           const { error } = await supabase.from('free_classes').update({ youtube_link: val, title: newTitle, description: descVal, is_live: false }).eq('id', cls.id);
-                                          if (!error) { fetchFreeClasses(); alert(`✅ Recording "${newTitle}" Saved!`); }
-                                          else alert("❌ Error: " + error.message);
+                                          if (!error) { fetchFreeClasses(); showToast(`Recording "${newTitle}" Saved!`); }
+                                          else showToast("Error saving recording: " + error.message, 'error');
                                       }
                                   }}
                                   style={{ fontSize: '0.8rem', padding: '0.5rem 0.75rem', marginBottom: 0 }} 
@@ -270,12 +272,12 @@ export default function ManageFreeClass() {
                                           if (descEl) descEl.value = '';
                                           fetchFreeClasses();
                                           if (data && data.length === 0) {
-                                              alert("❌ Database Error: No matching class found to update!");
+                                              showToast("Database Error: No matching class found!", 'error');
                                           } else {
-                                              alert(`✅ Recording "${newTitle}" successfully saved!`);
+                                              showToast(`Recording "${newTitle}" successfully saved!`);
                                           }
                                       } else {
-                                          alert("❌ Database Error: " + error.message);
+                                          showToast("Database Error: " + error.message, 'error');
                                       }
                                   }}
                                   style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 800, alignSelf: 'flex-end' }}
@@ -295,12 +297,6 @@ export default function ManageFreeClass() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '1rem' }}>
               <PlayCircle size={24} color="var(--color-primary)" /> {isEditing ? 'Edit Existing Content' : 'Upload Free Content'}
           </h2>
-
-          {successMsg && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontWeight: 600 }}>
-                  <CheckCircle size={20} /> {successMsg}
-              </div>
-          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ backgroundColor: 'rgba(225, 29, 72, 0.05)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--color-primary)' }}>

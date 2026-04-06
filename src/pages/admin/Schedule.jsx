@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Calendar, Save, Trash2, CheckCircle, PlusCircle, Users, Clock, Video, Youtube } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function Schedule() {
   const [activeTab, setActiveTab] = useState('add');
   const [isPublishing, setIsPublishing] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
   const [schedules, setSchedules] = useState([]);
+  const { showToast } = useToast();
 
   const [formData, setFormData] = useState({
       topic: '',
@@ -108,14 +109,13 @@ export default function Schedule() {
               }
           }
 
-          setSuccessMsg('Class schedule published successfully!');
+          showToast('Class schedule published successfully!');
           fetchSchedules();
           setFormData({topic: '', day: 'Monday', time: '', audienceType: 'All Students', zoomLink: '', youtubeLink: '', isFree: false}); 
           setSelectedGrades([]);
           setSelectedSubjects([]);
-          setTimeout(() => setSuccessMsg(''), 4000);
       } else {
-          alert("Error publishing: " + error.message);
+          showToast("Error publishing: " + error.message, 'error');
       }
       setIsPublishing(false);
   };
@@ -123,6 +123,7 @@ export default function Schedule() {
   const handleDelete = async (id) => {
       if(window.confirm('Delete this class schedule?')) {
           await supabase.from('schedules').delete().eq('id', id);
+          showToast('Schedule removed successfully.', 'warning');
           fetchSchedules();
       }
   };
@@ -247,9 +248,9 @@ export default function Schedule() {
                                       if (!error) {
                                           localStorage.setItem(`rec_saved_${cls.id}_${new Date().toDateString()}`, 'true');
                                           fetchSchedules(); // to re-render and remove the prompt UI
-                                          alert(`✅ Prompt successful! Recording "${newTitle}" saved dynamically into ${cls.is_free ? 'Free Classes' : 'Premium Recordings'}.`);
+                                          showToast(`Recording "${newTitle}" saved dynamically into ${cls.is_free ? 'Free Classes' : 'Premium Recordings'}.`);
                                       } else {
-                                          alert("❌ Database Error: " + error.message);
+                                          showToast("Database Error: " + error.message, 'error');
                                       }
                                   }}
                                   style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', fontWeight: 800, alignSelf: 'flex-end' }}
@@ -269,12 +270,6 @@ export default function Schedule() {
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '1rem' }}>
               <Calendar size={24} color="var(--color-primary)" /> Set New Timetable Block
           </h2>
-
-          {successMsg && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontWeight: 600 }}>
-                  <CheckCircle size={20} /> {successMsg}
-              </div>
-          )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
               <div style={{ backgroundColor: 'rgba(225, 29, 72, 0.05)', padding: '1.5rem', borderRadius: 'var(--radius-lg)', border: '1px dashed var(--color-primary)' }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, FileText, Lock, Globe, DollarSign, UserCheck, Search, Gift } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../../components/Toast';
 
 export default function ManageTutes() {
   const [tutes, setTutes] = useState([]);
@@ -19,6 +20,7 @@ export default function ManageTutes() {
   const [giftSearch, setGiftSearch] = useState('');
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedGiftTute, setSelectedGiftTute] = useState(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     fetchTutes();
@@ -51,8 +53,10 @@ export default function ManageTutes() {
 
         if (isEditing) {
             await supabase.from('tutes').update({ ...newTute, file_url: fileUrl }).eq('id', editingId);
+            showToast('Tute updated successfully!');
         } else {
             await supabase.from('tutes').insert({ ...newTute, file_url: fileUrl });
+            showToast('New Tute published successfully!');
         }
 
         setShowModal(false);
@@ -60,7 +64,7 @@ export default function ManageTutes() {
         setNewTute({ title: '', description: '', is_free: true, price: 0, grade: '2025 AL', subject: 'Physics' });
         setSelectedFile(null);
         fetchTutes();
-    } catch (err) { alert(err.message); } finally { setIsUploading(false); }
+    } catch (err) { showToast(err.message, 'error'); } finally { setIsUploading(false); }
   };
 
   const openEdit = (tute) => {
@@ -73,7 +77,26 @@ export default function ManageTutes() {
   const handleDelete = async (id) => {
     if(!window.confirm("Delete this Tute?")) return;
     await supabase.from('tutes').delete().eq('id', id);
+    showToast('Tute deleted successfully.', 'warning');
     fetchTutes();
+  };
+
+  const handleGiftAccess = async () => {
+      if(!selectedStudent || !selectedGiftTute) return;
+      try {
+          const { error } = await supabase.from('tute_enrollments').insert([{
+              student_id: selectedStudent.id,
+              tute_id: selectedGiftTute.id,
+              status: 'approved',
+              payment_method: 'gifted'
+          }]);
+          if(error) throw error;
+          showToast(`Access to "${selectedGiftTute.title}" gifted to ${selectedStudent.full_name}!`, 'success');
+          setShowGiftModal(false);
+          setSelectedStudent(null);
+      } catch (err) {
+          showToast("Gifting failed: " + err.message, 'error');
+      }
   };
 
   return (
