@@ -223,6 +223,7 @@ export default function Dashboard() {
   
   // High-precision Live Timer
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [activeBankIdx, setActiveBankIdx] = useState(0);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -275,10 +276,10 @@ export default function Dashboard() {
                      setStudentProfile(profile);
                      if(profile.nic) setNicNumber(profile.nic);
 
-                     // 1. Fetch available courses and filter by student profile (Year/Grade/Subject)
+                     // 1. Fetch available courses and join full instructor data
                      const { data: allCourses } = await supabase
                          .from('courses')
-                         .select('*, instructors(name)');
+                         .select('*, instructors(*)');
                      
                      if (allCourses && isMounted) {
                          const filtered = allCourses.filter(course => {
@@ -452,7 +453,7 @@ export default function Dashboard() {
       setShowTuteModal(false);
       setSelectedTute(null);
       setSelectedFile(null);
-      alert("Tute payment slip uploaded successfully! It will be reviewed shortly.");
+      showGlobalToast("Tute payment slip uploaded successfully! It will be reviewed shortly.", 'success');
     } catch (err) {
       console.error("Error uploading tute slip:", err);
       alert("Failed to upload tute slip: " + err.message);
@@ -692,12 +693,12 @@ export default function Dashboard() {
                     });
                     
                     if (error) throw error;
-                    alert(isSelfUnlock ? "පැය 5කට වීඩියෝව Unlock වුණා! (One-time Access Granted for 5h)" : "අනුමැතිය සඳහා ගුරුවරයා වෙත යොමු කළා! (Recording Request Sent to Instructor)");
+                    showGlobalToast(isSelfUnlock ? "පැය 5කට වීඩියෝව Unlock වුණා! (One-time Access Granted for 5h)" : "අනුමැතිය සඳහා ගුරුවරයා වෙත යොමු කළා! (Recording Request Sent to Instructor)", 'success');
                     
                     const { data: updated } = await supabase.from('recording_access_requests').select('*').eq('student_id', studentProfile.id);
                     setRecordingAccess(updated || []);
                 } catch (e) { 
-                    alert("Request failed. Please try again."); 
+                    showGlobalToast("Request failed. Please try again.", 'error'); 
                     console.error(e);
                 }
                 setRequestingRecId(null);
@@ -915,7 +916,7 @@ export default function Dashboard() {
 
                                     {(!enrollment || enrollment.status === 'rejected' || isExpired) ? (
                                         <button 
-                                            onClick={() => { setSelectedCourseId(course.id); setShowUploadModal(true); }} 
+                                            onClick={() => { setSelectedCourseId(course.id); setActiveBankIdx(0); setShowUploadModal(true); }} 
                                             className="btn btn-primary" style={{ width: '100%' }}
                                         >
                                             <CreditCard size={18} /> Pay Now
@@ -1091,34 +1092,81 @@ export default function Dashboard() {
                     </p>
                 </div>
 
-                {/* Bank Payment Details */}
+                {/* Bank Payment Details - Multiple Account Support */}
                 {(() => {
                     const course = availableCourses.find(c => c.id === selectedCourseId);
-                    if (!course?.bank_account_no) return null;
+                    if (!course) return null;
+
+                    // Support both new instructor-linked array and legacy course-defined single data
+                    const instructorBanks = course.instructors?.bank_accounts || [];
+                    const hasMultiBanks = instructorBanks.length > 0;
+                    
+                    const activeBank = hasMultiBanks 
+                        ? instructorBanks[activeBankIdx] || instructorBanks[0]
+                        : { 
+                            bank_name: course.bank_name, 
+                            account_no: course.bank_account_no, 
+                            account_name: course.bank_account_name, 
+                            branch: course.bank_branch 
+                          };
+
+                    if (!activeBank.account_no && !hasMultiBanks) return null;
+
                     return (
-                        <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '2px solid #22c55e', borderRadius: '20px', padding: '1.5rem' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
-                                <div style={{ width: '42px', height: '42px', backgroundColor: '#16a34a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏦</div>
-                                <div>
-                                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
-                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Bank Transfer Details</p>
+                        <div className="glass-premium" style={{ border: '2px solid #22c55e', borderRadius: '24px', padding: '1.5rem', background: 'linear-gradient(145deg, #f0fdf4 0%, #ffffff 100%)', boxShadow: '0 10px 25px rgba(34, 197, 94, 0.1)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                    <div style={{ width: '42px', height: '42px', backgroundColor: '#16a34a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏦</div>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
+                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Select a Bank Account to Pay</p>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Bank Selection Tabs */}
+                            {hasMultiBanks && instructorBanks.length > 1 && (
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                                    {instructorBanks.map((bank, idx) => (
+                                        <button 
+                                            key={bank.id}
+                                            type="button"
+                                            onClick={() => setActiveBankIdx(idx)}
+                                            style={{ 
+                                                padding: '0.5rem 1rem', 
+                                                borderRadius: '50px', 
+                                                border: '2px solid',
+                                                borderColor: activeBankIdx === idx ? '#16a34a' : '#e2e8f0',
+                                                background: activeBankIdx === idx ? '#16a34a' : 'white',
+                                                color: activeBankIdx === idx ? 'white' : '#64748b',
+                                                fontSize: '0.8rem',
+                                                fontWeight: 800,
+                                                whiteSpace: 'nowrap',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {bank.bank_name || `Account ${idx + 1}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                                 {[
-                                    { label: 'Bank Name / බැංකුව', value: course.bank_name },
-                                    { label: 'Account Number / ගිණුම් අංකය', value: course.bank_account_no },
-                                    { label: 'Account Name / නම', value: course.bank_account_name },
-                                    { label: 'Branch / ශාඛාව', value: course.bank_branch },
+                                    { label: 'Bank Name / බැංකුව', value: activeBank.bank_name },
+                                    { label: 'Account Number / ගිණුම් අංකය', value: activeBank.account_no || activeBank.bank_account_no },
+                                    { label: 'Account Name / නම', value: activeBank.account_name || activeBank.bank_account_name },
+                                    { label: 'Branch / ශාඛාව', value: activeBank.branch || activeBank.bank_branch },
                                 ].filter(item => item.value).map((item, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '0.85rem 1.25rem', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
-                                        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{item.label}</span>
-                                        <span style={{ fontWeight: 900, color: '#14532d', fontSize: '1rem', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{item.value}</span>
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '0.85rem 1.25rem', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', opacity: 0.8 }}>{item.label}</span>
+                                        <span style={{ fontWeight: 900, color: '#14532d', fontSize: '1.05rem', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{item.value}</span>
                                     </div>
                                 ))}
                             </div>
-                            <p style={{ margin: '1rem 0 0', fontSize: '0.78rem', color: '#16a34a', fontWeight: 600, textAlign: 'center' }}>
-                                💡 ඉහත ගිණුමට මුදල් transfer කර, රිසිට් පත photo ගෙන upload කරන්න
+                            <p style={{ margin: '1.25rem 0 0', fontSize: '0.8rem', color: '#16a34a', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                💡 <span style={{ opacity: 0.9 }}>ඉහත ගිණුමට මුදල් transfer කර, රිසිට් පත පහතින් upload කරන්න</span>
                             </p>
                         </div>
                     );

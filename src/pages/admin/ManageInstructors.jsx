@@ -36,7 +36,8 @@ export default function ManageInstructors() {
     bank_name: '',
     bank_account_no: '',
     bank_account_name: '',
-    bank_branch: ''
+    bank_branch: '',
+    bank_accounts: [] // New multi-account support
   });
   const [uploading, setUploading] = useState(false);
 
@@ -61,7 +62,8 @@ export default function ManageInstructors() {
       setFormData({
         ...instructor,
         new_password: '',
-        access_expiry_date: instructor.access_expiry_date ? instructor.access_expiry_date.split('T')[0] : ''
+        access_expiry_date: instructor.access_expiry_date ? instructor.access_expiry_date.split('T')[0] : '',
+        bank_accounts: instructor.bank_accounts || []
       });
     } else {
       setEditingInstructor(null);
@@ -86,7 +88,8 @@ export default function ManageInstructors() {
         bank_name: '',
         bank_account_no: '',
         bank_account_name: '',
-        bank_branch: ''
+        bank_branch: '',
+        bank_accounts: []
       });
     }
     setIsModalOpen(true);
@@ -168,12 +171,13 @@ export default function ManageInstructors() {
           .update(saveData)
           .eq('id', editingInstructor.id);
         if (error) throw error;
+        showToast('Instructor updated successfully!', 'success');
       } else {
         const { error } = await supabase
           .from('instructors')
           .insert([saveData]);
         if (error) throw error;
-        showToast('New Instructor profile created!');
+        showToast('New Instructor profile created!', 'success');
       }
       handleCloseModal();
       fetchInstructors();
@@ -181,6 +185,34 @@ export default function ManageInstructors() {
       showToast('Error saving instructor: ' + error.message, 'error');
       console.error(error);
     }
+  };
+
+  const addBankAccount = () => {
+      const newAcc = { 
+          id: crypto.randomUUID(), 
+          bank_name: '', 
+          account_no: '', 
+          account_name: '', 
+          branch: '' 
+      };
+      setFormData(prev => ({ 
+          ...prev, 
+          bank_accounts: [...(prev.bank_accounts || []), newAcc] 
+      }));
+  };
+
+  const removeBankAccount = (id) => {
+      setFormData(prev => ({
+          ...prev,
+          bank_accounts: prev.bank_accounts.filter(a => a.id !== id)
+      }));
+  };
+
+  const updateBankAccount = (id, field, value) => {
+      setFormData(prev => ({
+          ...prev,
+          bank_accounts: prev.bank_accounts.map(a => a.id === id ? { ...a, [field]: value } : a)
+      }));
   };
 
   const handleToggleBlock = async (instructor) => {
@@ -474,31 +506,57 @@ export default function ManageInstructors() {
                             </select>
                         </div>
 
-                        {/* Bank Payment Details */}
+                        {/* Bank Payment Details - Multi Support */}
                         <div style={{ borderTop: '2px solid #e2e8f0', paddingTop: '1rem', marginTop: '0.5rem' }}>
-                            <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏦 Bank Details</h3>
-                            <p style={{ margin: '0 0 0.75rem', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Auto-filled when this instructor creates a course card.</p>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                    <div>
-                                        <label className="input-label">Bank Name</label>
-                                        <input className="input-field" type="text" value={formData.bank_name} onChange={e => setFormData({...formData, bank_name: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. Commercial Bank" />
-                                    </div>
-                                    <div>
-                                        <label className="input-label">Account Number</label>
-                                        <input className="input-field" type="text" value={formData.bank_account_no} onChange={e => setFormData({...formData, bank_account_no: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. 1234567890" />
-                                    </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                                <div>
+                                    <h3 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>🏦 Bank Accounts</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Add multiple accounts (Sampath, Peoples, etc.)</p>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                                    <div>
-                                        <label className="input-label">Account Holder Name</label>
-                                        <input className="input-field" type="text" value={formData.bank_account_name} onChange={e => setFormData({...formData, bank_account_name: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. K.M. Prabhath" />
+                                <button type="button" onClick={addBankAccount} className="btn btn-outline" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', borderColor: '#16a34a', color: '#16a34a' }}>
+                                    + Add New
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {(formData.bank_accounts || []).map((acc, idx) => (
+                                    <div key={acc.id} style={{ background: 'white', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', position: 'relative' }}>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => removeBankAccount(acc.id)}
+                                            style={{ position: 'absolute', right: '10px', top: '10px', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                        
+                                        <label className="input-label" style={{ fontSize: '0.7rem', opacity: 0.7 }}>Account #{idx + 1}</label>
+                                        
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.5rem' }}>
+                                            <div>
+                                                <label className="input-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Bank Name</label>
+                                                <input className="input-field" value={acc.bank_name} onChange={e => updateBankAccount(acc.id, 'bank_name', e.target.value)} style={{ padding: '0.4rem', fontSize: '0.85rem', marginBottom: 0 }} placeholder="e.g. Peoples Bank" />
+                                            </div>
+                                            <div>
+                                                <label className="input-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Account No</label>
+                                                <input className="input-field" value={acc.account_no} onChange={e => updateBankAccount(acc.id, 'account_no', e.target.value)} style={{ padding: '0.4rem', fontSize: '0.85rem', marginBottom: 0 }} placeholder="1234..." />
+                                            </div>
+                                            <div>
+                                                <label className="input-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Holder Name</label>
+                                                <input className="input-field" value={acc.account_name} onChange={e => updateBankAccount(acc.id, 'account_name', e.target.value)} style={{ padding: '0.4rem', fontSize: '0.85rem', marginBottom: 0 }} placeholder="Name on account" />
+                                            </div>
+                                            <div>
+                                                <label className="input-label" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Branch</label>
+                                                <input className="input-field" value={acc.branch} onChange={e => updateBankAccount(acc.id, 'branch', e.target.value)} style={{ padding: '0.4rem', fontSize: '0.85rem', marginBottom: 0 }} placeholder="Branch Name" />
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label className="input-label">Branch</label>
-                                        <input className="input-field" type="text" value={formData.bank_branch} onChange={e => setFormData({...formData, bank_branch: e.target.value})} style={{ marginBottom: 0 }} placeholder="e.g. Colombo 03" />
+                                ))}
+
+                                {(formData.bank_accounts || []).length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '1rem', border: '1px dashed #cbd5e1', borderRadius: '12px', color: '#94a3b8', fontSize: '0.85rem' }}>
+                                        No bank accounts added yet.
                                     </div>
-                                </div>
+                                )}
                             </div>
                         </div>
                     </div>

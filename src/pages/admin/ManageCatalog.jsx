@@ -411,7 +411,7 @@ export default function ManageCatalog() {
                                 <div style={{ width: '36px', height: '36px', backgroundColor: '#16a34a', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1rem' }}>🏦</div>
                                 <div>
                                     <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem' }}>Bank Payment Details</h3>
-                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Students will see this when they click "Pay Now" for this course</p>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Note: Manage multiple bank accounts centrally in the <b style={{ textDecoration: 'underline' }}>Instructor Profile</b> section.</p>
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
