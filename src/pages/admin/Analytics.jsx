@@ -199,17 +199,28 @@ export default function Analytics() {
                 });
             }
 
+            // Mobile Friendly Download logic
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `Nexus_Income_Report_${new Date().toISOString().split('T')[0]}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            
+            // Detect if running in mobile webview/app
+            const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                // If on mobile, opening the blob URL in a new window is safer for some webviews
+                window.open(url, '_blank');
+            } else {
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `Nexus_Income_Report_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+            
+            setTimeout(() => URL.revokeObjectURL(url), 100);
         } catch (e) {
             console.error("Export Error:", e);
-            alert("Error downloading report.");
         } finally {
             setIsLoading(false);
         }

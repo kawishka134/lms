@@ -173,7 +173,6 @@ export default function Approvals() {
         showToast("Action failed: " + err.message, 'error');
     }
   };
-
   const filterData = (arr, type = 'student') => {
       if (!arr) return [];
       const query = searchQuery?.toLowerCase() || '';
@@ -218,11 +217,127 @@ export default function Approvals() {
           {count > 0 && <span style={{ backgroundColor: activeTab === id ? 'rgba(255,255,255,0.2)' : '#eee', padding: '2px 8px', borderRadius: '20px', fontSize: '0.7rem' }}>{count}</span>}
       </button>
   );
+  const handleCleanup = async () => {
+    if (!window.confirm("දවස් 7ක් පැරණි, දැනටමත් Approve හෝ Reject කළ රිසිට්පත් ඔක්කොම ස්ටෝරේජ් එකෙන් මකා දමන්නද? (මෙය නැවත සකස් කළ නොහැක)")) return;
+    
+    setLoading(true);
+    try {
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+        // 1. Get records to clean
+        const { data: toClean } = await supabase
+            .from('enrollments')
+            .select('id, slip_url')
+            .is('slip_purged_at', null)
+            .in('status', ['approved', 'rejected'])
+            .lte('created_at', sevenDaysAgo.toISOString());
+
+        const tuteToClean = await supabase
+            .from('tute_enrollments')
+            .select('id, slip_url')
+            .is('slip_purged_at', null)
+            .in('status', ['approved', 'rejected'])
+            .lte('created_at', sevenDaysAgo.toISOString());
+
+        const allToClean = [...(toClean || []), ...(tuteToClean?.data || [])];
+
+        if (allToClean.length === 0) {
+            showToast("මකා දැමීමට තරම් පැරණි රිසිට්පත් කිසිවක් හමු නොවීය.", 'info');
+            setLoading(false);
+            return;
+        }
+
+        let deletedCount = 0;
+        for (const record of allToClean) {
+            if (!record.slip_url) continue;
+            
+            // Extract filename from URL
+            const parts = record.slip_url.split('/');
+            const fileName = parts[parts.length - 1];
+            const bucket = record.slip_url.includes('tute_slips') ? 'tute_slips' : 'payment_slips';
+
+            // Delete from storage
+            await supabase.storage.from(bucket).remove([fileName]);
+            
+            // Update DB
+            const table = bucket === 'tute_slips' ? 'tute_enrollments' : 'enrollments';
+            await supabase.from(table).update({ 
+                slip_purged_at: new Date().toISOString(),
+                slip_url: null 
+            }).eq('id', record.id);
+
+            deletedCount++;
+        }
+
+        showToast(`සාර්ථකයි! රිසිට්පත් ${deletedCount}ක් ස්ටෝරේජ් එකෙන් ඉවත් කළා.`, 'success');
+        fetchSlips();
+    } catch (err) {
+        showToast("Cleanup failed: " + err.message, 'error');
+    }
+    setLoading(false);
+  };
+
+
+  const [storageStats, setStorageStats] = useState({ used: 0, total: 1024, count: 0 }); // In MB
+
+  const fetchStorageStats = async () => {
+    if (localStorage.getItem('admin_role') !== 'super_admin') return;
+    
+    // Estimation: 600KB per slip
+    const { count: enrollCount } = await supabase.from('enrollments').select('*', { count: 'exact', head: true }).not('slip_url', 'is', null);
+    const { count: tuteCount } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).not('slip_url', 'is', null);
+    
+    const totalCount = (enrollCount || 0) + (tuteCount || 0);
+    const estimatedMB = Math.round((totalCount * 0.6)); // 0.6MB per slip avg
+    setStorageStats({ used: estimatedMB, total: 1024, count: totalCount });
+  };
+
+  useEffect(() => {
+    fetchStorageStats();
+    const timer = setInterval(fetchStorageStats, 10000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const downloadReceipt = async (url) => {
+    try {
+        showToast("Downloading...", 'info');
+        
+        // Detect if mobile webview
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+            // For mobile apps/webviews, opening the direct HTTPS link in a new tab 
+            // is the most reliable way to trigger the native browser download manager
+            window.open(url, '_blank');
+            showToast("Opening in Browser...", 'success');
+        } else {
+            // High quality blob download for PC
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `nexus_receipt_${Date.now()}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+            showToast("Download Complete!", 'success');
+        }
+    } catch (err) {
+        window.open(url, '_blank');
+        showToast("Opened in Browser.", 'info');
+    }
+  };
 
   return (
     <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', gap: '2rem' }}>
-          <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: 'var(--color-primary)', letterSpacing: '-0.025em', margin: 0 }}>Sales Hub</h1>
+          <div>
+            <h1 style={{ fontSize: '2.25rem', fontWeight: 900, color: 'var(--color-primary)', letterSpacing: '-0.025em', margin: 0 }}>Sales Hub</h1>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Manage student payments & access</p>
+          </div>
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-surface-border)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <TabButton id="students" label="Monthly" icon={GraduationCap} color="#f43f5e" count={pendingSlips.length} />
               <TabButton id="videos" label="Video Access" icon={Video} color="#0284c7" count={videoRequests.length} />
@@ -258,12 +373,13 @@ export default function Approvals() {
                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{s.profiles?.full_name}</div>
                                   <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>{s.profiles?.phone}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 700 }}>{s.profiles?.year} - {s.profiles?.subject}</div>
                               </td>
                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 700 }}>{s.courses?.title}</div>
                                   {s.courses?.instructors?.name && <div style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600 }}>{s.courses.instructors.name}</div>}
                               </td>
-                              <td style={{ padding: '1.25rem' }}><button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>View Evidence</button></td>
+                              <td style={{ padding: '1.25rem' }}><button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}><FileText size={16} /> Evidence</button></td>
                               <td style={{ padding: '1.25rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                                         <button onClick={() => handleAction('enrollments', s.id, 'approved')} className="btn btn-primary" style={{ backgroundColor: '#10b981' }}>Approve</button>
@@ -388,66 +504,118 @@ export default function Approvals() {
       )}
 
       {activeTab === 'history' && (
-          <div className="card" style={{ padding: 0, overflowX: 'auto', border: 'none' }}>
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead style={{ background: '#f8fafc' }}>
-                      <tr>
-                          <th style={{ padding: '1.25rem' }}>Entity Name</th>
-                          <th style={{ padding: '1.25rem' }}>Course / Slip</th>
-                          <th style={{ padding: '1.25rem' }}>Status</th>
-                          <th style={{ padding: '1.25rem', textAlign: 'right' }}>Actions</th>
-                      </tr>
-                  </thead>
-                  <tbody>
-                      {filterData(approvedSlips).map(s => (
-                          <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '1rem 1.25rem' }}>
-                                  <div style={{ fontWeight: 700 }}>{s.profiles?.full_name}</div>
-                                  <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Monthly Student</div>
-                              </td>
-                              <td style={{ padding: '1rem 1.25rem' }}>{s.courses?.title}</td>
-                              <td style={{ padding: '1rem 1.25rem' }}><span className="badge badge-success">APPROVED</span></td>
-                              <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                                  <button onClick={() => handleAction('enrollments', s.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
-                                      <RotateCcw size={14} style={{ marginRight: '6px' }} /> Revoke
-                                  </button>
-                              </td>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+              {localStorage.getItem('admin_role') === 'super_admin' && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                      <div className="card" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                              <h3 style={{ margin: 0, fontWeight: 800, color: '#991b1b' }}>Optimize Storage</h3>
+                              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#991b1b', opacity: 0.8 }}>දින 7ක් පැරණි රිසිට්පත් මකන්න.</p>
+                              <button onClick={handleCleanup} className="btn btn-primary" style={{ backgroundColor: '#dc2626', marginTop: '1rem' }}>Clean Old Records</button>
+                          </div>
+                      </div>
+
+                      <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', padding: '1.5rem' }}>
+                           <div style={{ position: 'relative', width: '80px', height: '80px' }}>
+                                <svg width="80" height="80" viewBox="0 0 100 100">
+                                    <circle cx="50" cy="50" r="45" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+                                    <circle cx="50" cy="50" r="45" fill="none" stroke="var(--color-primary)" strokeWidth="10" strokeDasharray={`${(storageStats.used / storageStats.total) * 283} 283`} strokeDashoffset="0" strokeLinecap="round" transform="rotate(-90 50 50)" style={{ transition: 'stroke-dasharray 1s ease' }} />
+                                </svg>
+                                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 900 }}>
+                                    {Math.round((storageStats.used / storageStats.total) * 100)}%
+                                </div>
+                           </div>
+                           <div style={{ flex: 1 }}>
+                               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900 }}>Storage Monitor</h3>
+                               <p style={{ margin: '2px 0', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                                   {storageStats.used}MB / {storageStats.total}MB Used
+                               </p>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                                   <div style={{ width: '8px', height: '8px', background: '#10b981', borderRadius: '50%', animation: 'pulse 1.5s infinite' }}></div>
+                                   <span style={{ fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', opacity: 0.6 }}>Live Tracking ({storageStats.count} Slips)</span>
+                               </div>
+                           </div>
+                      </div>
+                  </div>
+              )}
+              
+              <div className="card" style={{ padding: 0, overflowX: 'auto', border: 'none' }}>
+                  <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                      <thead style={{ background: '#f8fafc' }}>
+                          <tr>
+                              <th style={{ padding: '1.25rem' }}>Entity Name</th>
+                              <th style={{ padding: '1.25rem' }}>Course / Slip</th>
+                              <th style={{ padding: '1.25rem' }}>Status</th>
+                              <th style={{ padding: '1.25rem', textAlign: 'right' }}>Actions</th>
                           </tr>
-                      ))}
-                      {filterData(instructorHistory, 'instructor').map(s => (
-                          <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '1rem 1.25rem' }}>
-                                  <div style={{ fontWeight: 700 }}>{s.instructors?.name}</div>
-                                  <div style={{ fontSize: '0.75rem', color: '#059669' }}>Instructor Commission</div>
-                              </td>
-                              <td style={{ padding: '1rem 1.25rem' }}>
-                                  <div style={{ fontSize: '0.85rem' }}>Receipt Date: {new Date(s.created_at).toLocaleDateString()}</div>
-                                  <button onClick={() => setSelectedImage(s.slip_url)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>View Slip</button>
-                              </td>
-                              <td style={{ padding: '1rem 1.25rem' }}><span className="badge" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>PAID / UNLOCKED</span></td>
-                              <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                                      <button onClick={() => handleAction('instructor_payments', s.id, 'pending')} className="btn btn-outline" style={{ color: '#64748b', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
-                                          <RotateCcw size={14} /> Reset
+                      </thead>
+                      <tbody>
+                          {filterData(approvedSlips).map(s => (
+                              <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '1rem 1.25rem' }}>
+                                      <div style={{ fontWeight: 700 }}>{s.profiles?.full_name}</div>
+                                      <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Monthly Student</div>
+                                  </td>
+                                  <td style={{ padding: '1rem 1.25rem' }}>
+                                      <div>{s.courses?.title}</div>
+                                      {s.slip_url ? (
+                                          <button onClick={() => setSelectedImage(s.slip_url)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>View Receipt</button>
+                                      ) : (
+                                          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Receipt Purged</span>
+                                      )}
+                                  </td>
+                                  <td style={{ padding: '1rem 1.25rem' }}><span className="badge badge-success">APPROVED</span></td>
+                                  <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                                      <button onClick={() => handleAction('enrollments', s.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                          <RotateCcw size={14} style={{ marginRight: '6px' }} /> Revoke
                                       </button>
-                                      <button onClick={() => handleAction('instructor_payments', s.id, 'rejected')} className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#fee2e2', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
-                                          <XCircle size={14} /> Revoke & Lock
-                                      </button>
-                                  </div>
-                              </td>
-                          </tr>
-                      ))}
-                      {(approvedSlips.length === 0 && instructorHistory.length === 0) && <tr><td colSpan="4" style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}>History Log Empty.</td></tr>}
-                  </tbody>
-              </table>
+                                  </td>
+                              </tr>
+                          ))}
+                          {filterData(instructorHistory, 'instructor').map(s => (
+                              <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '1rem 1.25rem' }}>
+                                      <div style={{ fontWeight: 700 }}>{s.instructors?.name}</div>
+                                      <div style={{ fontSize: '0.75rem', color: '#059669' }}>Instructor Commission</div>
+                                  </td>
+                                  <td style={{ padding: '1rem 1.25rem' }}>
+                                      <div style={{ fontSize: '0.85rem' }}>Receipt Date: {new Date(s.created_at).toLocaleDateString()}</div>
+                                      {s.slip_url ? (
+                                          <button onClick={() => setSelectedImage(s.slip_url)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>View Slip</button>
+                                      ) : (
+                                          <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Slip Purged</span>
+                                      )}
+                                  </td>
+                                  <td style={{ padding: '1rem 1.25rem' }}><span className="badge" style={{ backgroundColor: '#d1fae5', color: '#065f46' }}>PAID / UNLOCKED</span></td>
+                                  <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                          <button onClick={() => handleAction('instructor_payments', s.id, 'pending')} className="btn btn-outline" style={{ color: '#64748b', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                              <RotateCcw size={14} /> Reset
+                                          </button>
+                                          <button onClick={() => handleAction('instructor_payments', s.id, 'rejected')} className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#fee2e2', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                              <XCircle size={14} /> Revoke & Lock
+                                          </button>
+                                      </div>
+                                  </td>
+                              </tr>
+                          ))}
+                          {(filterData(approvedSlips).length === 0 && filterData(instructorHistory, 'instructor').length === 0) && <tr><td colSpan="4" style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}>History Log Empty.</td></tr>}
+                      </tbody>
+                  </table>
+              </div>
           </div>
       )}
 
       {selectedImage && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.9)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedImage(null)}>
-              <div style={{ position: 'relative', maxWidth: '80%', maxHeight: '90vh' }}>
-                  <img src={selectedImage} alt="Slip" style={{ maxWidth: '100%', maxHeight: '85vh', borderRadius: '12px', border: '4px solid white' }} />
-                  <p style={{ color: 'white', textAlign: 'center', marginTop: '1rem', fontWeight: 800 }}>CLICK OUTSIDE TO CLOSE</p>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedImage(null)}>
+              <div style={{ position: 'relative', maxWidth: '80%', maxHeight: '90vh', textAlign: 'center' }} onClick={e => e.stopPropagation()}>
+                  <img src={selectedImage} alt="Slip" style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: '20px', border: '4px solid rgba(255,255,255,0.2)', boxShadow: '0 0 50px rgba(0,0,0,0.5)' }} />
+                  <div style={{ marginTop: '1.5rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
+                      <button onClick={() => downloadReceipt(selectedImage)} className="btn btn-primary" style={{ backgroundColor: '#10b981', padding: '0.75rem 2rem', border: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <DollarSign size={18} /> Download High Quality
+                      </button>
+                      <button onClick={() => setSelectedImage(null)} className="btn btn-outline" style={{ color: 'white', borderColor: 'white' }}>Close Window</button>
+                  </div>
               </div>
           </div>
       )}

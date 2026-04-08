@@ -370,17 +370,24 @@ export default function Dashboard() {
                      const { data: freeContent } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
                      if(freeContent) setFreeClasses(freeContent.filter(n => isAudienceMatch(n.target_audience, profile)));
 
-                      const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
+                     const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
                      if(records) setRecordings(records.filter(r => isAudienceMatch(r.target_audience, profile)));
 
                      const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
                      if(recAccess && isMounted) setRecordingAccess(recAccess);
 
-                     const { data: allTutes } = await supabase.from('tutes').select('*').order('created_at', { ascending: false });
-                     if(allTutes) setTutes(allTutes.filter(t => isAudienceMatch(t.target_audience, profile)));
+                     const { data: allDocs } = await supabase.from('tutes').select('*').order('created_at', { ascending: false });
+                     if(allDocs && isMounted) {
+                         const userTutes = allDocs.filter(d => {
+                             const sG = String(profile.grade || '').toLowerCase();
+                             const sS = String(profile.subject || '').toLowerCase();
+                             return !d.grade || sG.includes(d.grade.toLowerCase()) || sS.includes(d.subject?.toLowerCase());
+                         });
+                         setTutes(userTutes);
+                     }
 
                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
-                     if(myTutes) setTuteEnrollments(myTutes);
+                     if(myTutes && isMounted) setTuteEnrollments(myTutes);
 
                      const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').single();
                      if(settings) setInstituteSettings(settings);
@@ -1011,7 +1018,85 @@ export default function Dashboard() {
 
   return (
     <div className="app-container" style={{ height: '100vh', overflow: 'hidden' }}>
-      {showToast && <div className="glass shimmer" style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 3000, borderLeft: '5px solid var(--color-primary)', padding: '1.25rem', borderRadius: '1rem', boxShadow: 'var(--shadow-premium)', display: 'flex', alignItems: 'center', gap: '1.25rem', width: '380px', maxWidth: 'calc(100vw - 3rem)' }}><Megaphone size={26} color="var(--color-primary)" /><div style={{ flex: 1 }}><h4 style={{ margin: 0, fontWeight: 900 }}>New Alert!</h4><p style={{ margin: '0.2rem 0', fontSize: '0.9rem' }}>{latestNoticeTitle}</p></div><X size={20} onClick={() => setShowToast(false)} style={{ cursor: 'pointer', opacity: 0.4 }} /></div>}
+      {showToast && (
+        <div 
+          onClick={() => { setActiveTab('special_announce'); setShowToast(false); }}
+          style={{ 
+            position: 'fixed', 
+            top: '24px', 
+            right: '24px', 
+            zIndex: 100000, 
+            width: '400px',
+            backgroundColor: '#0f172a', /* Deep midnight dark */
+            borderRadius: '20px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.05)',
+            overflow: 'hidden',
+            cursor: 'pointer',
+            animation: 'slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+            pointerEvents: 'auto',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
+          <div style={{ padding: '1.25rem', display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+            <div style={{
+              backgroundColor: 'rgba(139, 92, 246, 0.15)',
+              color: '#8b5cf6',
+              padding: '10px',
+              borderRadius: '14px',
+              display: 'flex'
+            }}>
+              <Megaphone size={22} strokeWidth={2.5} />
+            </div>
+            
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontSize: '0.75rem', 
+                fontWeight: 900, 
+                color: '#8b5cf6', 
+                textTransform: 'uppercase', 
+                letterSpacing: '0.15em',
+                marginBottom: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                New Notice <Sparkles size={12} fill="#8b5cf6" />
+              </div>
+              <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'white', lineHeight: 1.3, marginBottom: '0.2rem', letterSpacing: '-0.01em' }}>
+                නිවේදනයක් (New Alert!)
+              </div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 600, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>
+                {latestNoticeTitle}
+              </div>
+            </div>
+
+            <button 
+              onClick={(e) => { e.stopPropagation(); setShowToast(false); }}
+              style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'rgba(255,255,255,0.3)', borderRadius: '50%', cursor: 'pointer', padding: '6px', display: 'flex', transition: 'all 0.2s' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'white'}
+              onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.3)'}
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Draining Progress Bar Container */}
+          <div style={{ height: '4px', width: '100%', backgroundColor: 'rgba(255,255,255,0.05)' }}>
+             <div style={{
+                height: '100%',
+                backgroundColor: '#8b5cf6',
+                width: '100%',
+                animation: 'toastDrain 5s linear forwards'
+             }} />
+          </div>
+          
+          <style>{`
+            @keyframes toastDrain { from { width: 100%; } to { width: 0%; } }
+            @keyframes slideIn { from { transform: translateX(100%) scale(0.9); opacity: 0; } to { transform: translateX(0) scale(1); opacity: 1; } }
+          `}</style>
+        </div>
+      )}
       <header style={{ height: '85px', backgroundColor: 'var(--color-primary)', color: 'white', display: 'flex', alignItems: 'center', zIndex: 1000, position: 'relative' }}>
           <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
              <div><h1 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>Student Dashboard</h1><p style={{ margin: 0, fontSize: '0.85rem', opacity: 0.9 }}>Welcome, {studentProfile?.full_name}</p></div>

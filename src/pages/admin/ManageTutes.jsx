@@ -22,9 +22,30 @@ export default function ManageTutes() {
   const [selectedGiftTute, setSelectedGiftTute] = useState(null);
   const { showToast } = useToast();
 
+  const [availGrades, setAvailGrades] = useState([]);
+  const [availSubjects, setAvailSubjects] = useState([]);
+
   useEffect(() => {
     fetchTutes();
+    fetchOptions();
   }, []);
+
+  const fetchOptions = async () => {
+    const { data: courses } = await supabase.from('courses').select('year, subject');
+    if (courses && courses.length > 0) {
+        const uniqueGrades = [...new Set(courses.map(c => c.year ? (String(c.year).includes('Grade') ? c.year : `Grade ${c.year}`) : null).filter(Boolean))].sort();
+        const uniqueSubjects = [...new Set(courses.map(c => c.subject).filter(Boolean))].sort();
+        setAvailGrades(uniqueGrades);
+        setAvailSubjects(uniqueSubjects);
+        
+        // Auto-set the first ones if empty
+        if (!newTute.grade && uniqueGrades.length > 0) setNewTute(prev => ({...prev, grade: uniqueGrades[0]}));
+        if (!newTute.subject && uniqueSubjects.length > 0) setNewTute(prev => ({...prev, subject: uniqueSubjects[0]}));
+    } else {
+        setAvailGrades(['2025 AL', '2026 AL', 'Grade 11', 'Grade 10']);
+        setAvailSubjects(['Physics', 'ICT', 'Economics', 'Maths']);
+    }
+  };
 
   const fetchTutes = async () => {
     setLoading(true);
@@ -194,40 +215,85 @@ export default function ManageTutes() {
       )}
 
       {showModal && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)' }}>
-              <form onSubmit={handleAddTute} className="card" style={{ width: '100%', maxWidth: '500px', padding: '2.5rem' }}>
-                  <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '2rem' }}>{isEditing ? 'Edit Tute' : 'New Tute Setup'}</h2>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(15px)', padding: '1rem' }}>
+              <form 
+                onSubmit={handleAddTute} 
+                className="card" 
+                style={{ 
+                    width: '100%', 
+                    maxWidth: '550px', 
+                    padding: '2.5rem', 
+                    maxHeight: '90vh', 
+                    overflowY: 'auto',
+                    position: 'relative',
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+                }}
+              >
+                  <div style={{ position: 'sticky', top: '-2.5rem', background: 'white', zIndex: 10, margin: '-2.5rem -2.5rem 2rem', padding: '2rem 2.5rem 1rem', borderBottom: '1px solid #f1f5f9' }}>
+                      <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>{isEditing ? 'Edit Tute' : 'New Tute Setup'}</h2>
+                  </div>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                       <div style={{ display: 'flex', gap: '1rem' }}>
-                          <input placeholder="Grade (e.g. 2025 AL)" required value={newTute.grade} onChange={e => setNewTute({...newTute, grade: e.target.value})} className="input-field" style={{ flex: 1 }} />
-                          <input placeholder="Subject (e.g. Physics)" required value={newTute.subject} onChange={e => setNewTute({...newTute, subject: e.target.value})} className="input-field" style={{ flex: 1 }} />
+                          <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>TARGET GRADE</label>
+                              <select 
+                                required 
+                                value={newTute.grade} 
+                                onChange={e => setNewTute({...newTute, grade: e.target.value})} 
+                                className="input-field"
+                              >
+                                  {availGrades.map(g => <option key={g} value={g}>{g}</option>)}
+                              </select>
+                          </div>
+                          <div style={{ flex: 1 }}>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>SUBJECT</label>
+                              <select 
+                                required 
+                                value={newTute.subject} 
+                                onChange={e => setNewTute({...newTute, subject: e.target.value})} 
+                                className="input-field"
+                              >
+                                  {availSubjects.map(s => <option key={s} value={s}>{s}</option>)}
+                              </select>
+                          </div>
                       </div>
 
-                      <input placeholder="Tute Title" required value={newTute.title} onChange={e => setNewTute({...newTute, title: e.target.value})} className="input-field" />
-                      <textarea placeholder="Description" value={newTute.description} onChange={e => setNewTute({...newTute, description: e.target.value})} className="input-field" style={{ height: '80px' }} />
+                      <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>TUTE TITLE</label>
+                          <input placeholder="e.g. Mechanics - Part 1" required value={newTute.title} onChange={e => setNewTute({...newTute, title: e.target.value})} className="input-field" />
+                      </div>
+
+                      <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>DESCRIPTION</label>
+                          <textarea placeholder="Tell students what this tute covers..." value={newTute.description} onChange={e => setNewTute({...newTute, description: e.target.value})} className="input-field" style={{ height: '100px' }} />
+                      </div>
                       
                       <div style={{ display: 'flex', gap: '1rem' }}>
-                          <button type="button" onClick={() => setNewTute({...newTute, is_free: true})} className={`btn ${newTute.is_free ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Free</button>
-                          <button type="button" onClick={() => setNewTute({...newTute, is_free: false})} className={`btn ${!newTute.is_free ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Paid</button>
+                          <button type="button" onClick={() => setNewTute({...newTute, is_free: true})} className={`btn ${newTute.is_free ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Free Material</button>
+                          <button type="button" onClick={() => setNewTute({...newTute, is_free: false})} className={`btn ${!newTute.is_free ? 'btn-primary' : 'btn-outline'}`} style={{ flex: 1 }}>Paid Material</button>
                       </div>
 
                       {!newTute.is_free && (
                           <div style={{ position: 'relative' }}>
-                              <DollarSign size={18} style={{ position: 'absolute', left: '12px', top: '12px', opacity: 0.5 }} />
-                              <input type="number" placeholder="Price (LKR)" required value={newTute.price} onChange={e => setNewTute({...newTute, price: e.target.value})} className="input-field" style={{ paddingLeft: '2.5rem' }} />
+                              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>PRICE (LKR)</label>
+                              <div style={{ position: 'relative' }}>
+                                  <DollarSign size={18} style={{ position: 'absolute', left: '12px', top: '12px', opacity: 0.5 }} />
+                                  <input type="number" placeholder="Price (LKR)" required value={newTute.price} onChange={e => setNewTute({...newTute, price: e.target.value})} className="input-field" style={{ paddingLeft: '2.5rem' }} />
+                              </div>
                           </div>
                       )}
 
-                      <div style={{ border: '2px dashed var(--color-surface-border)', padding: '1rem', textAlign: 'center', borderRadius: '12px', cursor: 'pointer' }} onClick={() => document.getElementById('pdfFile').click()}>
-                          <FileText size={24} style={{ marginBottom: '0.5rem', opacity: 0.5 }} />
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: '0.8rem' }}>{selectedFile ? selectedFile.name : (isEditing ? 'Change PDF (Optional)' : 'Choose Tute PDF')}</p>
+                      <div style={{ border: '2px dashed var(--color-surface-border)', padding: '2rem', textAlign: 'center', borderRadius: '12px', cursor: 'pointer', background: '#f8fafc' }} onClick={() => document.getElementById('pdfFile').click()}>
+                          <FileText size={40} style={{ marginBottom: '1rem', opacity: 0.2, color: 'var(--color-primary)' }} />
+                          <p style={{ margin: 0, fontWeight: 900, color: 'var(--color-primary)' }}>{selectedFile ? selectedFile.name : (isEditing ? 'Change PDF (Keep empty to stay)' : 'Choose Tute PDF')}</p>
+                          <p style={{ margin: '5px 0 0', fontSize: '0.7rem', opacity: 0.5 }}>Only PDF files are supported</p>
                           <input id="pdfFile" type="file" accept="application/pdf" style={{ display: 'none' }} onChange={e => setSelectedFile(e.target.files[0])} />
                       </div>
 
-                      <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
+                      <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', position: 'sticky', bottom: '-2.5rem', background: 'white', margin: '0 -2.5rem -2.5rem', padding: '1.5rem 2.5rem 2.5rem', borderTop: '1px solid #f1f5f9' }}>
                           <button type="button" onClick={() => { setShowModal(false); setIsEditing(false); }} className="btn btn-outline" style={{ flex: 1 }}>Cancel</button>
-                          <button type="submit" disabled={isUploading} className="btn btn-primary" style={{ flex: 2 }}>{isUploading ? 'Uploading...' : (isEditing ? 'Update Tute' : 'Save Tute')}</button>
+                          <button type="submit" disabled={isUploading} className="btn btn-primary" style={{ flex: 2, height: '54px', fontSize: '1rem', fontWeight: 900 }}>{isUploading ? 'Uploading Please wait...' : (isEditing ? 'Update Tute Content' : 'Publish Tute PDF')}</button>
                       </div>
                   </div>
               </form>
