@@ -10,9 +10,10 @@ export default function ManageTutes() {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
-  const [newTute, setNewTute] = useState({ title: '', description: '', is_free: true, price: 0, grade: '2025 AL', subject: 'Physics' });
+  const [newTute, setNewTute] = useState({ title: '', description: '', is_free: true, price: 0, grade: '', batch: '', subject: '', instructor_id: '' });
   const [selectedFile, setSelectedFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [instructors, setInstructors] = useState([]);
 
   // Gifting States
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -23,33 +24,63 @@ export default function ManageTutes() {
   const { showToast } = useToast();
 
   const [availGrades, setAvailGrades] = useState([]);
+  const [availBatches, setAvailBatches] = useState([]);
   const [availSubjects, setAvailSubjects] = useState([]);
 
   useEffect(() => {
     fetchTutes();
     fetchOptions();
+    fetchInstructors();
   }, []);
 
+  const fetchInstructors = async () => {
+    const { data } = await supabase.from('instructors').select('id, name').order('name');
+    if (data) setInstructors(data);
+  };
+
   const fetchOptions = async () => {
-    const { data: courses } = await supabase.from('courses').select('year, subject');
+    const { data: courses } = await supabase.from('courses').select('year, subject, batch');
+    
+    // Standard Defaults
+    const defaultGrades = ['Grade 6', 'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12', 'Grade 13'];
+    const defaultBatches = ['2023', '2024', '2025', '2026', '2027'];
+    const defaultSubjects = ['Accounting', 'Business Studies', 'Economics', 'O/L Commerce', 'Physics', 'ICT', 'Maths'];
+
+    let uniqueGrades = [];
+    let uniqueBatches = [];
+    let uniqueSubjects = [];
+
     if (courses && courses.length > 0) {
-        const uniqueGrades = [...new Set(courses.map(c => c.year ? (String(c.year).includes('Grade') ? c.year : `Grade ${c.year}`) : null).filter(Boolean))].sort();
-        const uniqueSubjects = [...new Set(courses.map(c => c.subject).filter(Boolean))].sort();
-        setAvailGrades(uniqueGrades);
-        setAvailSubjects(uniqueSubjects);
-        
-        // Auto-set the first ones if empty
-        if (!newTute.grade && uniqueGrades.length > 0) setNewTute(prev => ({...prev, grade: uniqueGrades[0]}));
-        if (!newTute.subject && uniqueSubjects.length > 0) setNewTute(prev => ({...prev, subject: uniqueSubjects[0]}));
-    } else {
-        setAvailGrades(['2025 AL', '2026 AL', 'Grade 11', 'Grade 10']);
-        setAvailSubjects(['Physics', 'ICT', 'Economics', 'Maths']);
+        uniqueGrades = [...new Set(courses.map(c => c.year ? (String(c.year).includes('Grade') ? c.year : `Grade ${c.year}`) : null).filter(Boolean))];
+        uniqueBatches = [...new Set(courses.map(c => c.batch).filter(Boolean))];
+        uniqueSubjects = [...new Set(courses.map(c => c.subject).filter(Boolean))];
     }
+
+    // Merge and uniquely sort
+    const finalGrades = [...new Set([...defaultGrades, ...uniqueGrades])].sort((a, b) => {
+        const getNum = s => parseInt(s.replace(/\D/g, '')) || 0;
+        return getNum(a) - getNum(b);
+    });
+    const finalBatches = [...new Set([...defaultBatches, ...uniqueBatches])].sort();
+    const finalSubjects = [...new Set([...defaultSubjects, ...uniqueSubjects])].sort();
+
+    setAvailGrades(finalGrades);
+    setAvailBatches(finalBatches);
+    setAvailSubjects(finalSubjects);
+    
+    // Auto-set defaults if empty
+    setNewTute(prev => ({
+        ...prev,
+        grade: prev.grade || finalGrades[0],
+        batch: prev.batch || finalBatches[0],
+        subject: prev.subject || finalSubjects[0],
+        instructor_id: prev.instructor_id || ''
+    }));
   };
 
   const fetchTutes = async () => {
     setLoading(true);
-    const { data } = await supabase.from('tutes').select('*').order('created_at', { ascending: false });
+    const { data } = await supabase.from('tutes').select('*, instructors(name)').order('created_at', { ascending: false });
     if (data) setTutes(data);
     
     // Fetch students for gifting
@@ -67,29 +98,58 @@ export default function ManageTutes() {
         if (selectedFile) {
             const fileExt = selectedFile.name.split('.').pop();
             const fileName = `tute-${Date.now()}.${fileExt}`;
-            await supabase.storage.from('tutes').upload(fileName, selectedFile);
+            const { error: uploadError } = await supabase.storage.from('tutes').upload(fileName, selectedFile);
+            if (uploadError) throw uploadError;
+            
             const { data } = supabase.storage.from('tutes').getPublicUrl(fileName);
             fileUrl = data.publicUrl;
         }
 
+        // Combine for table compatibility
+        const tuteData = {
+            title: newTute.title,
+            description: newTute.description,
+            is_free: newTute.is_free,
+            price: newTute.price,
+            file_url: fileUrl,
+            grade: newTute.grade,
+            subject: newTute.subject,
+            batch: newTute.batch,
+            instructor_id: newTute.instructor_id || null,
+            target_audience: `${newTute.grade} ${newTute.batch} ${newTute.subject}`
+        };
+
         if (isEditing) {
-            await supabase.from('tutes').update({ ...newTute, file_url: fileUrl }).eq('id', editingId);
+            const { error } = await supabase.from('tutes').update(tuteData).eq('id', editingId);
+            if (error) throw error;
             showToast('Tute updated successfully!');
         } else {
-            await supabase.from('tutes').insert({ ...newTute, file_url: fileUrl });
+            const { error } = await supabase.from('tutes').insert([tuteData]);
+            if (error) throw error;
             showToast('New Tute published successfully!');
         }
 
         setShowModal(false);
         setIsEditing(false);
-        setNewTute({ title: '', description: '', is_free: true, price: 0, grade: '2025 AL', subject: 'Physics' });
+        setNewTute({ title: '', description: '', is_free: true, price: 0, grade: availGrades[0], subject: availSubjects[0], instructor_id: '' });
         setSelectedFile(null);
         fetchTutes();
-    } catch (err) { showToast(err.message, 'error'); } finally { setIsUploading(false); }
+    } catch (err) { 
+        console.error("Tute upload error:", err);
+        showToast(err.message || "Failed to save Tute", 'error'); 
+    } finally { 
+        setIsUploading(false); 
+    }
   };
 
   const openEdit = (tute) => {
-      setNewTute({ ...tute });
+      setNewTute({ 
+          ...tute, 
+          grade: tute.grade || availGrades[0], 
+          batch: tute.batch || availBatches[0],
+          subject: tute.subject || availSubjects[0],
+          instructor_id: tute.instructor_id || ''
+      });
       setEditingId(tute.id);
       setIsEditing(true);
       setShowModal(true);
@@ -139,6 +199,7 @@ export default function ManageTutes() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                             <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>{tute.grade}</span>
+                            <span className="badge badge-outline" style={{ fontSize: '0.65rem' }}>{tute.batch}</span>
                             <span className="badge badge-success" style={{ fontSize: '0.65rem' }}>{tute.subject}</span>
                             <span className={`badge ${tute.is_free ? 'badge-success' : 'badge-primary'}`} style={{ fontSize: '0.65rem' }}>{tute.is_free ? 'FREE' : `Rs. ${tute.price}`}</span>
                         </div>
@@ -147,7 +208,8 @@ export default function ManageTutes() {
                             <button onClick={() => handleDelete(tute.id)} style={{ color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={18} /></button>
                         </div>
                     </div>
-                    <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: '0.5rem' }}>{tute.title}</h3>
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: '0.25rem' }}>{tute.title}</h3>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 800, marginBottom: '0.5rem' }}>Sir: {tute.instructors?.name || 'Not Linked'}</p>
                     <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '1rem', overflow: 'hidden' }}>{tute.description}</p>
                     <div style={{ fontSize: '0.75rem', opacity: 0.5, marginBottom: '1rem' }}>Added: {new Date(tute.created_at).toLocaleDateString()}</div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -233,9 +295,9 @@ export default function ManageTutes() {
                       <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0 }}>{isEditing ? 'Edit Tute' : 'New Tute Setup'}</h2>
                   </div>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                      <div style={{ display: 'flex', gap: '1rem' }}>
-                          <div style={{ flex: 1 }}>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
+                          <div>
                               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>TARGET GRADE</label>
                               <select 
                                 required 
@@ -246,7 +308,18 @@ export default function ManageTutes() {
                                   {availGrades.map(g => <option key={g} value={g}>{g}</option>)}
                               </select>
                           </div>
-                          <div style={{ flex: 1 }}>
+                          <div>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>TARGET YEAR/BATCH</label>
+                              <select 
+                                required 
+                                value={newTute.batch} 
+                                onChange={e => setNewTute({...newTute, batch: e.target.value})} 
+                                className="input-field"
+                              >
+                                  {availBatches.map(b => <option key={b} value={b}>{b} Intake</option>)}
+                              </select>
+                          </div>
+                          <div>
                               <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>SUBJECT</label>
                               <select 
                                 required 
@@ -257,6 +330,19 @@ export default function ManageTutes() {
                                   {availSubjects.map(s => <option key={s} value={s}>{s}</option>)}
                               </select>
                           </div>
+                      </div>
+
+                      <div>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>ASSIGNED INSTRUCTOR (SIR)</label>
+                          <select 
+                            required 
+                            value={newTute.instructor_id} 
+                            onChange={e => setNewTute({...newTute, instructor_id: e.target.value})} 
+                            className="input-field"
+                          >
+                              <option value="">-- Select Instructor --</option>
+                              {instructors.map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
+                          </select>
                       </div>
 
                       <div>

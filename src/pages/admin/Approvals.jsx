@@ -7,6 +7,7 @@ export default function Approvals() {
   const [pendingSlips, setPendingSlips] = useState([]);
   const [approvedSlips, setApprovedSlips] = useState([]);
   const [tuteSlips, setTuteSlips] = useState([]);
+  const [approvedTutes, setApprovedTutes] = useState([]);
   const [instructorSlips, setInstructorSlips] = useState([]);
   const [instructorHistory, setInstructorHistory] = useState([]);
   const [videoRequests, setVideoRequests] = useState([]);
@@ -46,9 +47,17 @@ export default function Approvals() {
     // Fetch Tute Slips
     const { data: tutes, error: errorTutes } = await supabase
         .from('tute_enrollments')
-        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price)`)
+        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
+
+    // Fetch Approved Tutes
+    const { data: appTutes } = await supabase
+        .from('tute_enrollments')
+        .select(`id, created_at, approved_at, expires_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(50);
 
     // Fetch Instructor Commission Slips
     const { data: instSlips, error: errorInstSlips } = await supabase
@@ -68,17 +77,22 @@ export default function Approvals() {
     let finalPending = pending || [];
     let finalApproved = approved || [];
     let finalVReqs = vReqs || [];
-    
+    let finalTutes = tutes || [];
+    let finalAppTutes = appTutes || [];
+
     if (adminRole === 'instructor' && instructorId) {
         finalPending = finalPending.filter(p => p.courses?.instructor_id === instructorId);
         finalApproved = finalApproved.filter(p => p.courses?.instructor_id === instructorId);
         finalVReqs = finalVReqs.filter(v => v.recordings?.instructor_id === instructorId);
+        finalTutes = finalTutes.filter(t => t.tutes?.instructor_id === instructorId);
+        finalAppTutes = finalAppTutes.filter(t => t.tutes?.instructor_id === instructorId);
     }
 
     setPendingSlips(finalPending);
     setApprovedSlips(finalApproved);
     setVideoRequests(finalVReqs);
-    setTuteSlips(adminRole === 'instructor' ? [] : (tutes || []));
+    setTuteSlips(finalTutes);
+    setApprovedTutes(finalAppTutes);
     setInstructorSlips(instSlips || []);
     setInstructorHistory(instHistory || []);
     if (errorPending) console.error("Pending Enrollments Error:", errorPending);
@@ -130,7 +144,14 @@ export default function Approvals() {
         
         if (table === 'recording_access_requests' && newStatus === 'approved') {
             const now = new Date();
-            const expiry = new Date(now.getTime() + (5 * 60 * 60 * 1000)); // 5-hour window for Admin Unlock
+            const expiry = new Date(now.getTime() + (5 * 60 * 60 * 1000)); // 5-hour window
+            updateData.approved_at = now.toISOString();
+            updateData.expires_at = expiry.toISOString();
+        }
+
+        if (table === 'tute_enrollments' && newStatus === 'approved') {
+            const now = new Date();
+            const expiry = new Date(now.getTime() + (7 * 60 * 60 * 1000)); // 7-hour window for Download
             updateData.approved_at = now.toISOString();
             updateData.expires_at = expiry.toISOString();
         }
@@ -188,7 +209,8 @@ export default function Approvals() {
           (s.profiles?.full_name?.toLowerCase() || '').includes(query) || 
           (s.profiles?.phone || '').includes(query) || 
           (s.recordings?.title?.toLowerCase() || '').includes(query) ||
-          (s.courses?.title?.toLowerCase() || '').includes(query)
+          (s.courses?.title?.toLowerCase() || '').includes(query) ||
+          (s.tutes?.title?.toLowerCase() || '').includes(query)
       );
   };
 
@@ -225,22 +247,35 @@ export default function Approvals() {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-        // 1. Get records to clean
+        // 1. Get records to clean (Monthly)
         const { data: toClean } = await supabase
             .from('enrollments')
             .select('id, slip_url')
-            .is('slip_purged_at', null)
-            .in('status', ['approved', 'rejected'])
+            .not('slip_url', 'is', null)
+            .neq('status', 'pending')
             .lte('created_at', sevenDaysAgo.toISOString());
 
-        const tuteToClean = await supabase
+        // 2. Get records to clean (Tutes)
+        const { data: tuteToClean } = await supabase
             .from('tute_enrollments')
             .select('id, slip_url')
-            .is('slip_purged_at', null)
-            .in('status', ['approved', 'rejected'])
+            .not('slip_url', 'is', null)
+            .neq('status', 'pending')
             .lte('created_at', sevenDaysAgo.toISOString());
 
-        const allToClean = [...(toClean || []), ...(tuteToClean?.data || [])];
+        // 3. Get records to clean (Instructors)
+        const { data: instToClean } = await supabase
+            .from('instructor_payments')
+            .select('id, slip_url')
+            .not('slip_url', 'is', null)
+            .neq('status', 'pending')
+            .lte('created_at', sevenDaysAgo.toISOString());
+
+        const allToClean = [
+            ...(toClean || []).map(x => ({ ...x, table: 'enrollments' })),
+            ...(tuteToClean || []).map(x => ({ ...x, table: 'tute_enrollments' })),
+            ...(instToClean || []).map(x => ({ ...x, table: 'instructor_payments' }))
+        ];
 
         if (allToClean.length === 0) {
             showToast("මකා දැමීමට තරම් පැරණි රිසිට්පත් කිසිවක් හමු නොවීය.", 'info');
@@ -248,54 +283,120 @@ export default function Approvals() {
             return;
         }
 
+        console.log("Records found for cleanup:", allToClean);
+
         let deletedCount = 0;
+        let errors = [];
+        
         for (const record of allToClean) {
-            if (!record.slip_url) continue;
-            
-            // Extract filename from URL
-            const parts = record.slip_url.split('/');
-            const fileName = parts[parts.length - 1];
-            const bucket = record.slip_url.includes('tute_slips') ? 'tute_slips' : 'payment_slips';
+            try {
+                if (!record.slip_url) continue;
+                
+                // Extract path and bucket from URL
+                const parts = record.slip_url.split('/');
+                let bucket = 'payment_slips';
+                let filePath = '';
 
-            // Delete from storage
-            await supabase.storage.from(bucket).remove([fileName]);
-            
-            // Update DB
-            const table = bucket === 'tute_slips' ? 'tute_enrollments' : 'enrollments';
-            await supabase.from(table).update({ 
-                slip_purged_at: new Date().toISOString(),
-                slip_url: null 
-            }).eq('id', record.id);
+                if (record.slip_url.includes('tute_slips')) {
+                    bucket = 'tute_slips';
+                    filePath = parts[parts.length - 1]; // Simple files
+                } else if (record.slip_url.includes('site-media')) {
+                    bucket = 'site-media';
+                    // Extract EVERYTHING after 'site-media'
+                    const bIdx = parts.indexOf('site-media');
+                    filePath = parts.slice(bIdx + 1).join('/');
+                } else {
+                    bucket = 'payment_slips';
+                    filePath = parts[parts.length - 1];
+                }
 
-            deletedCount++;
+                // 1. Delete from storage
+                const { error: storeErr } = await supabase.storage.from(bucket).remove([filePath]);
+                if (storeErr) console.warn("Storage removal warning:", storeErr);
+                
+                // 2. Update DB (Hide the URL)
+                const { error: dbErr } = await supabase.from(record.table)
+                    .update({ slip_url: null })
+                    .eq('id', record.id);
+                
+                if (dbErr) {
+                    console.error(`DB Update Error for ${record.table} ID ${record.id}:`, dbErr);
+                    errors.push(dbErr.message);
+                } else {
+                    deletedCount++;
+                }
+            } catch (innerErr) {
+                console.error("Loop error:", innerErr);
+                errors.push(innerErr.message);
+            }
         }
 
-        showToast(`සාර්ථකයි! රිසිට්පත් ${deletedCount}ක් ස්ටෝරේජ් එකෙන් ඉවත් කළා.`, 'success');
-        fetchSlips();
+        if (errors.length > 0) {
+            showToast(`අසාර්ථකයි: ${errors[0]}`, 'error');
+        } else {
+            showToast(`සාර්ථකයි! රිසිට්පත් ${deletedCount}ක් ස්ථිරවම මකා දැමුවා.`, 'success');
+        }
+        
+        // Final refresh and reload to be 100% sure
+        await fetchSlips();
+        setTimeout(() => window.location.reload(), 1000);
     } catch (err) {
         showToast("Cleanup failed: " + err.message, 'error');
     }
     setLoading(false);
   };
 
+  const handleDeleteRequest = async (table, id, slipUrl) => {
+    if (!window.confirm("මෙම ඉල්ලීම සහ මෙයට අදාළ රිසිට්පත ස්ථිරවම මකා දමන්නද?")) return;
+    try {
+        setLoading(true);
+        if (slipUrl) {
+            const parts = slipUrl.split('/');
+            const fileName = parts[parts.length - 1];
+            const isTute = slipUrl.includes('tute_slips');
+            const bucket = isTute ? 'tute_slips' : 'payment_slips';
+            await supabase.storage.from(bucket).remove([fileName]);
+        }
+        const { error } = await supabase.from(table).delete().eq('id', id);
+        if (error) throw error;
+        showToast("Record and Receipt deleted permanently.", 'success');
+        fetchSlips();
+    } catch (err) {
+        showToast("Delete failed: " + err.message, 'error');
+    } finally {
+        setLoading(false);
+    }
+  };
 
   const [storageStats, setStorageStats] = useState({ used: 0, total: 1024, count: 0 }); // In MB
 
   const fetchStorageStats = async () => {
     if (localStorage.getItem('admin_role') !== 'super_admin') return;
     
-    // Estimation: 600KB per slip
-    const { count: enrollCount } = await supabase.from('enrollments').select('*', { count: 'exact', head: true }).not('slip_url', 'is', null);
-    const { count: tuteCount } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).not('slip_url', 'is', null);
-    
-    const totalCount = (enrollCount || 0) + (tuteCount || 0);
-    const estimatedMB = Math.round((totalCount * 0.6)); // 0.6MB per slip avg
-    setStorageStats({ used: estimatedMB, total: 1024, count: totalCount });
+    try {
+        const { data, error } = await supabase.from('storage_usage_view').select('*');
+        if (error) throw error;
+
+        let totalBytes = 0;
+        let totalCount = 0;
+        
+        if (data) {
+            data.forEach(item => {
+                totalBytes += parseInt(item.total_size || 0);
+                totalCount += parseInt(item.file_count || 0);
+            });
+        }
+
+        const usedMB = (totalBytes / (1024 * 1024)).toFixed(2);
+        setStorageStats({ used: usedMB, total: 1024, count: totalCount });
+    } catch (err) {
+        console.error("Storage Stats Error:", err);
+    }
   };
 
   useEffect(() => {
     fetchStorageStats();
-    const timer = setInterval(fetchStorageStats, 10000);
+    const timer = setInterval(fetchStorageStats, 3000); // Live tracking every 3 seconds
     return () => clearInterval(timer);
   }, []);
 
@@ -341,12 +442,8 @@ export default function Approvals() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-surface-border)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <TabButton id="students" label="Monthly" icon={GraduationCap} color="#f43f5e" count={pendingSlips.length} />
               <TabButton id="videos" label="Video Access" icon={Video} color="#0284c7" count={videoRequests.length} />
-              {localStorage.getItem('admin_role') !== 'instructor' && (
-                  <>
                     <TabButton id="instructors" label="Commissions" icon={DollarSign} color="#10b981" count={instructorSlips.length} />
                     <TabButton id="tutes" label="Tutes" icon={ShoppingBag} color="#8b5cf6" count={tuteSlips.length} />
-                  </>
-              )}
               <TabButton id="history" label="History" icon={History} color="#64748b" />
           </div>
       </div>
@@ -493,7 +590,8 @@ export default function Approvals() {
                               <td style={{ padding: '1.25rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                         <button onClick={() => handleAction('tute_enrollments', s.id, 'approved')} className="btn btn-primary" style={{ backgroundColor: '#8b5cf6' }}>Approve</button>
-                                        <button onClick={() => handleAction('tute_enrollments', s.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)' }}><XCircle size={18} /></button>
+                                        <button onClick={() => handleAction('tute_enrollments', s.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)' }} title="Reject"><XCircle size={18} /></button>
+                                        <button onClick={() => handleDeleteRequest('tute_enrollments', s.id, s.slip_url)} className="btn btn-outline" style={{ color: '#94a3b8', borderColor: '#f1f5f9' }} title="Delete Permanently"><ShoppingBag size={18} /></button>
                                     </div>
                               </td>
                           </tr>
@@ -572,6 +670,40 @@ export default function Approvals() {
                                   </td>
                               </tr>
                           ))}
+                          {filterData(approvedTutes).map(s => {
+                               const expired = s.expires_at && new Date(s.expires_at) < new Date();
+                               return (
+                               <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                   <td style={{ padding: '1rem 1.25rem' }}>
+                                       <div style={{ fontWeight: 700 }}>{s.profiles?.full_name}</div>
+                                       <div style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Tute Access</div>
+                                   </td>
+                                   <td style={{ padding: '1rem 1.25rem' }}>
+                                       <div>{s.tutes?.title}</div>
+                                       {s.slip_url ? (
+                                           <button onClick={() => setSelectedImage(s.slip_url)} style={{ border: 'none', background: 'none', color: 'var(--color-primary)', fontSize: '0.7rem', textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>View Receipt</button>
+                                       ) : (
+                                           <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Receipt Deleted</span>
+                                       )}
+                                   </td>
+                                   <td style={{ padding: '1rem 1.25rem' }}>
+                                       <span className={`badge ${expired ? 'badge-danger' : 'badge-success'}`}>
+                                           {expired ? 'EXPIRED (7h)' : 'ACTIVE ACCESS'}
+                                       </span>
+                                       {s.expires_at && !expired && <div style={{ fontSize: '0.65rem', marginTop: '4px', opacity: 0.5 }}>Expires: {new Date(s.expires_at).toLocaleTimeString()}</div>}
+                                   </td>
+                                   <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                            <button onClick={() => handleAction('tute_enrollments', s.id, 'pending')} className="btn btn-outline" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                                <RotateCcw size={14} /> Reset
+                                            </button>
+                                            <button onClick={() => handleDeleteRequest('tute_enrollments', s.id, s.slip_url)} className="btn btn-outline" style={{ color: '#ef4444', borderColor: '#fee2e2', padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                                                Delete
+                                            </button>
+                                        </div>
+                                   </td>
+                               </tr>
+                           )})}
                           {filterData(instructorHistory, 'instructor').map(s => (
                               <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                   <td style={{ padding: '1rem 1.25rem' }}>
@@ -599,7 +731,7 @@ export default function Approvals() {
                                   </td>
                               </tr>
                           ))}
-                          {(filterData(approvedSlips).length === 0 && filterData(instructorHistory, 'instructor').length === 0) && <tr><td colSpan="4" style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}>History Log Empty.</td></tr>}
+                          {(filterData(approvedSlips).length === 0 && filterData(approvedTutes).length === 0 && filterData(instructorHistory, 'instructor').length === 0) && <tr><td colSpan="4" style={{ padding: '3rem', textAlign: 'center', opacity: 0.5 }}>History Log Empty.</td></tr>}
                       </tbody>
                   </table>
               </div>

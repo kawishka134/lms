@@ -213,6 +213,7 @@ export default function Dashboard() {
   const [latestNoticeTitle, setLatestNoticeTitle] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [instituteSettings, setInstituteSettings] = useState(null);
+  const [activeTuteBankIdx, setActiveTuteBankIdx] = useState(0);
   const [lastReadTime, setLastReadTime] = useState(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
   
   // Search
@@ -349,10 +350,17 @@ export default function Dashboard() {
                      const isAudienceMatch = (targetAudienceStr, profileData) => {
                          if (!targetAudienceStr || targetAudienceStr === 'All Students') return true;
                          if (!profileData) return false;
-                         const studentData = `${profileData.grade} ${profileData.year} ${profileData.subject} ${profileData.medium}`.toLowerCase();
+                         
+                         // Prepend 'grade' to numeric grade for better matching (e.g. "12" becomes "grade 12")
+                         const normalizedGrade = String(profileData.grade || '').toLowerCase();
+                         const gradeWithPrefix = normalizedGrade.startsWith('grade') ? normalizedGrade : `grade ${normalizedGrade}`;
+                         
+                         const studentData = `${normalizedGrade} ${gradeWithPrefix} ${profileData.year} ${profileData.subject} ${profileData.medium}`.toLowerCase();
                          const targets = targetAudienceStr.split(',').map(t => t.trim().toLowerCase());
+                         
                          return targets.some(target => {
                              const words = target.split(' ').filter(w => w !== '');
+                             // Every word in the target segment (e.g., "Grade 12 Economics") must exist in student's data
                              return words.every(word => studentData.includes(word));
                          });
                      };
@@ -376,14 +384,9 @@ export default function Dashboard() {
                      const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
                      if(recAccess && isMounted) setRecordingAccess(recAccess);
 
-                     const { data: allDocs } = await supabase.from('tutes').select('*').order('created_at', { ascending: false });
+                     const { data: allDocs } = await supabase.from('tutes').select('*, instructors(*)').order('created_at', { ascending: false });
                      if(allDocs && isMounted) {
-                         const userTutes = allDocs.filter(d => {
-                             const sG = String(profile.grade || '').toLowerCase();
-                             const sS = String(profile.subject || '').toLowerCase();
-                             return !d.grade || sG.includes(d.grade.toLowerCase()) || sS.includes(d.subject?.toLowerCase());
-                         });
-                         setTutes(userTutes);
+                         setTutes(allDocs.filter(d => isAudienceMatch(d.target_audience, profile)));
                      }
 
                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
@@ -473,9 +476,22 @@ export default function Dashboard() {
       }, { onConflict: 'student_id, tute_id' });
 
       // WhatsApp Notify
-      const waMsg = `Hi Admin, I have requested Tute PDF: *${selectedTute.title}* and uploaded the slip. My Phone: ${studentProfile.phone}. Please approve.`;
-      const waUrl = `https://wa.me/94761180532?text=${encodeURIComponent(waMsg)}`;
+      const slipUrl = data.publicUrl;
+      const superAdminPhone = instituteSettings?.contact_phone1 || '94761180532';
+      const instructorPhone = selectedTute.instructors?.phone;
+      
+      const waMsg = `Hi, I have requested Tute PDF: *${selectedTute.title}* and uploaded the slip.\n\nStudent: ${studentProfile.full_name}\nPhone: ${studentProfile.phone}\nSlip: ${slipUrl}`;
+      const waUrl = `https://wa.me/${superAdminPhone.replace(/\+/g, '')}?text=${encodeURIComponent(waMsg)}`;
+      
+      // Open WhatsApp to Super Admin
       window.open(waUrl, '_blank');
+
+      // If there's a specific instructor, notify them too (if browser allows or they click again)
+      if (instructorPhone && instructorPhone !== superAdminPhone) {
+          const instWaUrl = `https://wa.me/${instructorPhone.replace(/\+/g, '')}?text=${encodeURIComponent(waMsg + "\n\nPlease approve my tute request.")}`;
+          // We can't easily open two windows at once reliably, so maybe we show a button or just open the second one after a short delay
+          setTimeout(() => window.open(instWaUrl, '_blank'), 1000);
+      }
 
       // Refresh tute enrollments
       const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
@@ -833,44 +849,64 @@ export default function Dashboard() {
                                     )}
                                 </div>
                             </div>
-                        );
-                    })}
-                </div>
-            );
-        case 'tute_pdf':
-            const filteredTutes = tutes.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase()));
-            return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                    {filteredTutes.map(tute => {
-                        const myEnroll = tuteEnrollments.find(e => e.tute_id === tute.id);
-                        const isUnlocked = tute.is_free || myEnroll?.status === 'approved';
-                        return (
-                            <div key={tute.id} className="card" style={{ borderLeft: isUnlocked ? '6px solid var(--color-success)' : '6px solid var(--color-primary-light)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                    {tute.is_free ? <span className="badge badge-success">FREE TUTE</span> : <span className="badge badge-primary">PREMIUM (Rs. {tute.price})</span>}
-                                    {!tute.is_free && myEnroll?.status === 'pending' && <span className="badge badge-warning" style={{ color: 'white' }}>PENDING REVIEW</span>}
-                                </div>
-                                <h3 style={{ fontWeight: 800 }}>{tute.title}</h3>
-                                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>{tute.description}</p>
+                    );
+                })}
+            </div>
+        );
+    case 'tute_pdf':
+        const filteredTutes = tutes.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase()));
+        return (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                {filteredTutes.map(tute => {
+                    const myEnroll = tuteEnrollments.find(e => e.tute_id === tute.id);
+                    const isApproved = myEnroll?.status === 'approved';
+                    const expiresAt = myEnroll?.expires_at ? new Date(myEnroll.expires_at) : null;
+                    const isExpired = isApproved && expiresAt && expiresAt < new Date();
+                    const isUnlocked = tute.is_free || (isApproved && !isExpired);
 
-                                {isUnlocked ? (
-                                    <a href={tute.file_url} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #166534' }}>
-                                        <FileText size={18} /> Open/Download PDF
-                                    </a>
-                                ) : (
-                                    <button
-                                        onClick={() => { setSelectedTute(tute); setShowTuteModal(true); }}
-                                        className="btn btn-primary"
-                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
-                                    >
-                                        <Lock size={18} /> Buy This Tute
-                                    </button>
+                    return (
+                        <div key={tute.id} className="card" style={{ borderLeft: isUnlocked ? '6px solid var(--color-success)' : isExpired ? '6px solid #ef4444' : '6px solid var(--color-primary-light)', opacity: isExpired ? 0.9 : 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                {tute.is_free ? <span className="badge badge-success">FREE TUTE</span> : isExpired ? <span className="badge badge-danger">ACCESS EXPIRED</span> : <span className="badge badge-primary">PREMIUM (Rs. {tute.price})</span>}
+                                {!tute.is_free && myEnroll?.status === 'pending' && <span className="badge badge-warning" style={{ color: 'white' }}>PENDING REVIEW</span>}
+                                {isApproved && !isExpired && expiresAt && (
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <Clock size={12} /> {Math.ceil((expiresAt - new Date()) / 3600000)}h left
+                                    </div>
                                 )}
                             </div>
-                        );
-                    })}
-                </div>
-            );
+                            <h3 style={{ fontWeight: 800 }}>{tute.title}</h3>
+                            <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>{tute.description}</p>
+
+                            {isUnlocked ? (
+                                <a href={tute.file_url} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #166534' }}>
+                                    <FileText size={18} /> Open/Download PDF
+                                </a>
+                            ) : isExpired ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#991b1b', fontWeight: 800 }}>⚠️ පැය 7ක කාලය අවසන්! නැවත විවෘත කිරීමට Admin හමුවන්න.</p>
+                                    <button
+                                        onClick={() => window.open(`https://wa.me/94771234567?text=Nexus%20LMS:%20Hi,%20My%20tute%20access%20expired%20for%20(${tute.title}).%20Please%20unlock%20it.`, '_blank')}
+                                        className="btn btn-outline"
+                                        style={{ color: '#ef4444', borderColor: '#ef4444', fontWeight: 800 }}
+                                    >
+                                        Request Unlock (WhatsApp)
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => { setSelectedTute(tute); setActiveTuteBankIdx(0); setShowTuteModal(true); }}
+                                    className="btn btn-primary"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
+                                >
+                                    <Lock size={18} /> Buy This Tute
+                                </button>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+        );
         case 'about_me':
             return (
                 <div className="card" style={{ padding: '2.5rem' }}>
@@ -1339,19 +1375,93 @@ export default function Dashboard() {
         </div>
       )}
 
-       {/* Tute Payment Modal */}
-       {showTuteModal && selectedTute && (
-           <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)' }}>
-               <div className="card" style={{ width: '100%', maxWidth: '450px', padding: '2rem' }}>
+        {/* Tute Payment Modal */}
+        {showTuteModal && selectedTute && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', padding: '1.5rem' }}>
+                <div className="card" style={{ width: '100%', maxWidth: '450px', maxHeight: '95vh', overflowY: 'auto', padding: '2rem', position: 'relative' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
                         <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>Purchase Tute PDF</h2>
                         <X onClick={() => {setShowTuteModal(false); setSelectedTute(null);}} style={{ cursor: 'pointer', opacity: 0.5 }} />
                     </div>
-                    <div style={{ backgroundColor: 'var(--color-primary-light)', padding: '1.5rem', borderRadius: '12px', marginBottom: '2rem' }}>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>{selectedTute.title}</h3>
-                        <p style={{ margin: '0.5rem 0 0', fontWeight: 900, color: 'var(--color-primary)', fontSize: '1.5rem' }}>Rs. {selectedTute.price}.00</p>
+                    <div style={{ backgroundColor: 'var(--color-primary-light)', padding: '1.25rem', borderRadius: '12px', marginBottom: '1.5rem' }}>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>{selectedTute.title}</h3>
+                        <p style={{ margin: '0.25rem 0 0', fontWeight: 900, color: 'var(--color-primary)', fontSize: '1.25rem' }}>Rs. {selectedTute.price}.00</p>
                     </div>
-                    <p style={{ fontSize: '0.9rem', marginBottom: '1.5rem', fontWeight: 500 }}>කරුණාකර රු. {selectedTute.price}/= ගෙවා එහි රිසිට් පත පහතින් Upload කරන්න. පසුව Admin මගින් අනුමත කරනු ඇත.</p>
+
+                    {/* Tute Bank Details Display */}
+                    {(() => {
+                        const instructor = selectedTute.instructors;
+                        if (!instructor) return null;
+
+                        const instructorBanks = instructor.bank_accounts || [];
+                        const hasMultiBanks = instructorBanks.length > 0;
+                        
+                        const activeBank = hasMultiBanks 
+                            ? instructorBanks[activeTuteBankIdx] || instructorBanks[0]
+                            : { 
+                                bank_name: instructor.bank_name, 
+                                account_no: instructor.bank_account_no, 
+                                account_name: instructor.bank_account_name, 
+                                branch: instructor.bank_branch 
+                              };
+
+                        if (!activeBank.account_no && !hasMultiBanks) return null;
+
+                        return (
+                            <div className="glass-premium" style={{ border: '2px solid #22c55e', borderRadius: '20px', padding: '1.25rem', background: 'linear-gradient(145deg, #f0fdf4 0%, #ffffff 100%)', marginBottom: '1.5rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                                    <div style={{ width: '36px', height: '36px', backgroundColor: '#16a34a', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>🏦</div>
+                                    <div>
+                                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '0.9rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
+                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#16a34a', fontWeight: 600 }}>Instructor: {instructor.name}</p>
+                                    </div>
+                                </div>
+
+                                {hasMultiBanks && instructorBanks.length > 1 && (
+                                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.4rem' }}>
+                                        {instructorBanks.map((bank, idx) => (
+                                            <button 
+                                                key={bank.id || idx}
+                                                type="button"
+                                                onClick={() => setActiveTuteBankIdx(idx)}
+                                                style={{ 
+                                                    padding: '0.4rem 0.8rem', 
+                                                    borderRadius: '50px', 
+                                                    border: '2px solid',
+                                                    borderColor: activeTuteBankIdx === idx ? '#16a34a' : '#e2e8f0',
+                                                    background: activeTuteBankIdx === idx ? '#16a34a' : 'white',
+                                                    color: activeTuteBankIdx === idx ? 'white' : '#64748b',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 800,
+                                                    whiteSpace: 'nowrap',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {bank.bank_name || `Acc ${idx + 1}`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                                    {[
+                                        { label: 'Bank Name', value: activeBank.bank_name },
+                                        { label: 'Acc Number', value: activeBank.account_no || activeBank.bank_account_no },
+                                        { label: 'Acc Name', value: activeBank.account_name || activeBank.bank_account_name },
+                                        { label: 'Branch', value: activeBank.branch || activeBank.bank_branch }
+                                    ].filter(item => item.value).map((item, i) => (
+                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '0.6rem 1rem', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>{item.label}</span>
+                                            <span style={{ fontWeight: 800, color: '#14532d', fontSize: '0.85rem', fontFamily: 'monospace' }}>{item.value}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    <p style={{ fontSize: '0.85rem', marginBottom: '1rem', fontWeight: 600, color: '#1e293b' }}>ඉහත බැංකු ගිණුමට රු. {selectedTute.price}/= ගෙවා එහි රිසිට් පත පහතින් Upload කරන්න.</p>
 
                     <form onSubmit={handleTuteRequest}>
                         <div onClick={() => fileInputRef.current.click()} style={{ border: '2px dashed var(--color-primary)', padding: '2rem', textAlign: 'center', borderRadius: '12px', cursor: 'pointer', marginBottom: '2rem' }}>

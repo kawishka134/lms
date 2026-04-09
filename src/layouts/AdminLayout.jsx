@@ -33,7 +33,10 @@ export default function AdminLayout() {
             // 2. Recording Requests
             let recQuery = supabase.from('recording_access_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
             // 3. Tute Requests
-            let tuteQuery = supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            let tuteQuery = supabase
+                .from('tute_enrollments')
+                .select('id, tutes!inner(instructor_id)', { count: 'exact', head: true })
+                .eq('status', 'pending');
 
             if (adminRole === 'instructor' && instructorId) {
                 const { data: myCourses } = await supabase.from('courses').select('id').eq('instructor_id', instructorId);
@@ -43,7 +46,9 @@ export default function AdminLayout() {
                 const { data: myRecs } = await supabase.from('recordings').select('id').eq('instructor_id', instructorId);
                 const recIds = myRecs?.map(r => r.id) || [];
                 recQuery = recQuery.in('recording_id', recIds);
-                tuteQuery = null; // Instructors usually don't manage tutes based on Approvals.jsx
+                
+                // New: Filter tutes by instructor_id
+                tuteQuery = tuteQuery.eq('tutes.instructor_id', instructorId);
             }
             
             const { count: enrollCount } = await enrollQuery;

@@ -15,7 +15,7 @@ export default function Analytics() {
     // Real dynamic data states
     const [monthlyData, setMonthlyData] = useState([]);
     const [popularClasses, setPopularClasses] = useState([]);
-    
+    const [timeRange, setTimeRange] = useState(6); // Default 6 months
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
@@ -30,8 +30,9 @@ export default function Analytics() {
                 const { count: pendingEnrollments } = await supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
                 const { count: pendingTutes } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
                 
-                // Fetch approved enrollments to calculate real revenue and popularity
+                // Fetch approved enrollments and tutes to calculate real revenue
                 const { data: approvedEnrollments } = await supabase.from('enrollments').select('created_at, course_id, courses(title, price)').eq('status', 'approved');
+                const { data: approvedTutes } = await supabase.from('tute_enrollments').select('created_at, tute_id, tutes(title, price)').eq('status', 'approved');
                 
                 // Fetch approved instructor commissions
                 const { data: approvedCommissions } = await supabase.from('instructor_payments').select('created_at, amount, instructors(name)').eq('status', 'approved');
@@ -65,6 +66,23 @@ export default function Analytics() {
                         classCountMap[courseTitle] = (classCountMap[courseTitle] || 0) + 1;
                     });
                 }
+
+                if (approvedTutes) {
+                    approvedTutes.forEach(t => {
+                        let amount = 0;
+                        if (t.tutes && t.tutes.price) amount = Number(t.tutes.price);
+                        totalRevenue += amount;
+
+                        const dateObj = new Date(t.created_at);
+                        const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+                        const monthLabel = dateObj.toLocaleString('en-US', { month: 'short' });
+
+                        if (!monthlyMap[monthKey]) {
+                            monthlyMap[monthKey] = { label: monthLabel, income: 0, expense: 0, sortKey: monthKey };
+                        }
+                        monthlyMap[monthKey].income += amount;
+                    });
+                }
                 
                 if (approvedCommissions) {
                     approvedCommissions.forEach(c => {
@@ -82,18 +100,21 @@ export default function Analytics() {
                     });
                 }
                 
-                const recentMonths = Object.values(monthlyMap)
-                    .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
-                    .slice(-6) 
-                    .map(item => ({ 
-                        month: item.label, 
-                        income: item.income, 
-                        expense: item.expense,
-                        net: item.income - item.expense 
-                    }));
-
-                if (recentMonths.length === 0) {
-                     recentMonths.push({ month: 'N/A', income: 0, expense: 0, net: 0 });
+                // --- PRO CHART DATA FILLING ---
+                const recentMonths = [];
+                const now = new Date();
+                for (let i = timeRange - 1; i >= 0; i--) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                    const monthLabel = d.toLocaleString('en-US', { month: 'short' });
+                    
+                    const existing = monthlyMap[monthKey];
+                    recentMonths.push({
+                        month: monthLabel,
+                        income: existing ? existing.income : 0,
+                        expense: existing ? existing.expense : 0,
+                        net: existing ? (existing.income - existing.expense) : 0
+                    });
                 }
 
                 const topClasses = Object.entries(classCountMap)
@@ -126,7 +147,7 @@ export default function Analytics() {
             }
         };
         fetchStats();
-    }, []);
+    }, [timeRange]);
 
     const downloadCSV = async () => {
         const adminRole = localStorage.getItem('admin_role');
@@ -164,8 +185,19 @@ export default function Analytics() {
             }
 
             const { data: commissionData } = await commQuery;
+
+            // Fetch Tutes for CSV
+            let tuteQuery = supabase
+                .from('tute_enrollments')
+                .select('created_at, tutes(title, price, instructor_id), profiles(full_name, nic)')
+                .eq('status', 'approved');
             
-            if ((!data || data.length === 0) && (!commissionData || commissionData.length === 0)) {
+            if (adminRole === 'instructor' && currentInstructorId) {
+                tuteQuery = tuteQuery.filter('tutes.instructor_id', 'eq', currentInstructorId);
+            }
+            const { data: tuteData } = await tuteQuery;
+            
+            if ((!data || data.length === 0) && (!commissionData || commissionData.length === 0) && (!tuteData || tuteData.length === 0)) {
                 alert("No payment data found for your account.");
                 setIsLoading(false);
                 return;
@@ -196,6 +228,17 @@ export default function Analytics() {
                     const amount = item.amount || '0';
                     
                     csvContent += `"${date}","Platform Profit","${instructorName}","N/A","Instructor-to-Owner Comm.","${amount}","Received"\n`;
+                });
+            }
+
+            if (tuteData) {
+                tuteData.forEach(item => {
+                    const date = new Date(item.created_at).toLocaleDateString();
+                    const studentName = item.profiles?.full_name || 'N/A';
+                    const nic = item.profiles?.nic || 'N/A';
+                    const tute = item.tutes?.title || 'Tute Purchase';
+                    const amount = item.tutes?.price || '0';
+                    csvContent += `"${date}","Tute Collection","${studentName}","${nic}","${tute}","${amount}","Approved"\n`;
                 });
             }
 
@@ -242,6 +285,34 @@ export default function Analytics() {
                         <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>Overview of your system performance</p>
                     </div>
                 </div>
+                <div style={{ display: 'flex', gap: '0.5rem', background: '#f1f5f9', padding: '0.4rem', borderRadius: '12px' }}>
+                    {[
+                        { label: '30 Days', val: 1 },
+                        { label: '3 Months', val: 3 },
+                        { label: '6 Months', val: 6 },
+                        { label: '1 Year', val: 12 },
+                    ].map(r => (
+                        <button 
+                            key={r.val}
+                            onClick={() => setTimeRange(r.val)}
+                            style={{ 
+                                padding: '0.5rem 1rem', 
+                                border: 'none', 
+                                borderRadius: '8px', 
+                                fontSize: '0.75rem', 
+                                fontWeight: 800,
+                                background: timeRange === r.val ? 'white' : 'transparent',
+                                color: timeRange === r.val ? 'var(--color-primary)' : '#64748b',
+                                boxShadow: timeRange === r.val ? '0 2px 8px rgba(0,0,0,0.05)' : 'none',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {r.label}
+                        </button>
+                    ))}
+                </div>
+
                 <button 
                     onClick={downloadCSV}
                     className="btn btn-primary"
@@ -295,24 +366,24 @@ export default function Analytics() {
             <div className="card" style={{ marginBottom: '2rem' }}>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '2rem' }}>Income vs Expenses (Last 6 Months)</h3>
                 
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3%', height: '280px', padding: '0 1rem', borderBottom: '1px solid var(--color-surface-border)', overflowX: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4%', height: '280px', padding: '0 1rem', borderBottom: '1px solid #f1f5f9', overflowX: 'auto', position: 'relative' }}>
                     {monthlyData.map((data, index) => {
-                        const maxVal = Math.max(...monthlyData.map(d => Math.max(d.income, d.expense, 1)));
+                        const maxVal = Math.max(...monthlyData.map(d => Math.max(d.income, d.expense, 1000))); // Min 1000 for better scale
                         const incomeH = (data.income / maxVal) * 100;
                         const expenseH = (data.expense / maxVal) * 100;
                         return (
-                            <div key={index} style={{ flex: 1, minWidth: '100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
-                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', width: '100%', justifyContent: 'center' }}>
+                            <div key={index} style={{ flex: 1, minWidth: '60px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+                                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '6px', width: '100%', height: '100%', justifyContent: 'center' }}>
                                     {/* Income Bar */}
-                                    <div style={{ width: '20px', height: `${incomeH}%`, backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', position: 'relative' }}>
-                                        {incomeH > 10 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#064e3b' }}>{data.income > 1000 ? (data.income/1000).toFixed(1)+'k' : data.income}</div>}
+                                    <div style={{ width: '24px', height: `${incomeH}%`, background: 'linear-gradient(to top, #10b981, #34d399)', borderRadius: '6px 6px 0 0', position: 'relative', transition: 'height 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                                        {data.income > 0 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#064e3b', whiteSpace: 'nowrap' }}>{data.income > 1000 ? (data.income/1000).toFixed(1)+'k' : data.income}</div>}
                                     </div>
                                     {/* Expense Bar */}
-                                    <div style={{ width: '20px', height: `${expenseH}%`, backgroundColor: '#ef4444', borderRadius: '4px 4px 0 0', position: 'relative' }}>
-                                        {expenseH > 10 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#991b1b' }}>{data.expense > 1000 ? (data.expense/1000).toFixed(1)+'k' : data.expense}</div>}
+                                    <div style={{ width: '24px', height: `${expenseH}%`, background: 'linear-gradient(to top, #ef4444, #f87171)', borderRadius: '6px 6px 0 0', position: 'relative', transition: 'height 0.6s cubic-bezier(0.4, 0, 0.2, 1)' }}>
+                                        {data.expense > 0 && <div style={{ position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)', fontSize: '0.65rem', fontWeight: 900, color: '#991b1b', whiteSpace: 'nowrap' }}>{data.expense > 1000 ? (data.expense/1000).toFixed(1)+'k' : data.expense}</div>}
                                     </div>
                                 </div>
-                                <div style={{ marginTop: '1rem', fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{data.month}</div>
+                                <div style={{ marginTop: '1.25rem', fontWeight: 800, fontSize: '0.75rem', color: '#64748b' }}>{data.month}</div>
                             </div>
                         );
                     })}
