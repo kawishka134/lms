@@ -127,6 +127,17 @@ export default function ManageTutes() {
             const { error } = await supabase.from('tutes').insert([tuteData]);
             if (error) throw error;
             showToast('New Tute published successfully!');
+            
+            // Generate notification for new Tute
+            try {
+                await supabase.from('announcements').insert([{
+                   title: `නව නිබන්ධනයක්: ${newTute.title}`,
+                   message: `${newTute.subject} විෂයට අදාළව ${newTute.is_free ? 'නොමිලේ ලබාගත හැකි (FREE)' : 'අලුත්'} නිබන්ධනයක් (Tute) එකතු කර ඇත.\n"Class Tute PDF" අංශයට ගොස් ලබාගන්න.`,
+                   target_audience: tuteData.target_audience
+                }]);
+            } catch(e) {
+                console.error("Failed to post tute announcement:", e);
+            }
         }
 
         setShowModal(false);

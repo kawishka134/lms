@@ -214,7 +214,7 @@ export default function Dashboard() {
   const [showToast, setShowToast] = useState(false);
   const [instituteSettings, setInstituteSettings] = useState(null);
   const [activeTuteBankIdx, setActiveTuteBankIdx] = useState(0);
-  const [lastReadTime, setLastReadTime] = useState(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
+  const [lastReadTime, setLastReadTime] = useState(0);
   
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -258,15 +258,19 @@ export default function Dashboard() {
   // Mark as read after 3s on tab
   useEffect(() => {
     if (activeTab === 'special_announce' && announcements.length > 0) {
-        const timer = setTimeout(() => {
+        const timer = setTimeout(async () => {
             const latestTime = new Date(announcements[0].created_at).getTime();
             localStorage.setItem('last_read_notices_time', latestTime.toString());
             setLastReadTime(latestTime);
             setNewNoticesCount(0);
+            
+            if (studentProfile) {
+                await supabase.from('profiles').update({ last_read_notices_time: latestTime }).eq('id', studentProfile.id);
+            }
         }, 3000);
         return () => clearTimeout(timer);
     }
-  }, [activeTab, announcements]);
+  }, [activeTab, announcements, studentProfile]);
 
   // Handle Browser Back Button for Modal
   useEffect(() => {
@@ -300,6 +304,13 @@ export default function Dashboard() {
                  if (profile) {
                      setStudentProfile(profile);
                      if(profile.nic) setNicNumber(profile.nic);
+
+                     if (profile.last_read_notices_time) {
+                         setLastReadTime(parseInt(profile.last_read_notices_time));
+                         localStorage.setItem('last_read_notices_time', profile.last_read_notices_time.toString());
+                     } else {
+                         setLastReadTime(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
+                     }
 
                      // 1. Fetch available courses and join full instructor data
                      const { data: allCourses } = await supabase
@@ -408,6 +419,7 @@ export default function Dashboard() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recordings' }, () => fetchData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tutes' }, () => fetchData())
         .subscribe();
       return () => { isMounted = false; supabase.removeChannel(channel); }
   }, [studentProfile?.id]);
@@ -474,24 +486,6 @@ export default function Dashboard() {
         slip_url: data.publicUrl,
         status: 'pending'
       }, { onConflict: 'student_id, tute_id' });
-
-      // WhatsApp Notify
-      const slipUrl = data.publicUrl;
-      const superAdminPhone = instituteSettings?.contact_phone1 || '94761180532';
-      const instructorPhone = selectedTute.instructors?.phone;
-      
-      const waMsg = `Hi, I have requested Tute PDF: *${selectedTute.title}* and uploaded the slip.\n\nStudent: ${studentProfile.full_name}\nPhone: ${studentProfile.phone}\nSlip: ${slipUrl}`;
-      const waUrl = `https://wa.me/${superAdminPhone.replace(/\+/g, '')}?text=${encodeURIComponent(waMsg)}`;
-      
-      // Open WhatsApp to Super Admin
-      window.open(waUrl, '_blank');
-
-      // If there's a specific instructor, notify them too (if browser allows or they click again)
-      if (instructorPhone && instructorPhone !== superAdminPhone) {
-          const instWaUrl = `https://wa.me/${instructorPhone.replace(/\+/g, '')}?text=${encodeURIComponent(waMsg + "\n\nPlease approve my tute request.")}`;
-          // We can't easily open two windows at once reliably, so maybe we show a button or just open the second one after a short delay
-          setTimeout(() => window.open(instWaUrl, '_blank'), 1000);
-      }
 
       // Refresh tute enrollments
       const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
@@ -893,6 +887,10 @@ export default function Dashboard() {
                                         Request Unlock (WhatsApp)
                                     </button>
                                 </div>
+                            ) : myEnroll?.status === 'pending' ? (
+                                <button disabled className="btn btn-outline" style={{ width: '100%', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                                    <Clock size={18} /> Waiting for Approval
+                                </button>
                             ) : (
                                 <button
                                     onClick={() => { setSelectedTute(tute); setActiveTuteBankIdx(0); setShowTuteModal(true); }}
