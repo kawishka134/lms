@@ -9,6 +9,10 @@ export default function Register() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
+
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [userOtp, setUserOtp] = useState('');
   
   const [formData, setFormData] = useState({
     fullName: '',
@@ -97,11 +101,11 @@ export default function Register() {
     
     // Final check
     if (!validateNIC(formData.nic)) {
-        setError('Invalid NIC number format. Please provide a valid Sri Lankan NIC.');
+        showToast('Invalid NIC number format. Please provide a valid Sri Lankan NIC.', 'error');
         return;
     }
     if (!validatePhone(formData.phone)) {
-        setError('Invalid WhatsApp number. Please provide a valid Sri Lankan mobile number.');
+        showToast('Invalid WhatsApp number. Please provide a valid Sri Lankan mobile number.', 'error');
         return;
     }
 
@@ -119,6 +123,54 @@ export default function Register() {
         throw new Error('Phone number or NIC is already registered. Please login or use different details.');
       }
 
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      setGeneratedOtp(otp);
+
+      // Send via SMSLenz API
+      let formattedPhone = formData.phone.trim();
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '94' + formattedPhone.slice(1);
+      } else if (!formattedPhone.startsWith('94') && !formattedPhone.startsWith('+')) {
+        formattedPhone = '94' + formattedPhone;
+      }
+      formattedPhone = formattedPhone.replace('+', ''); // Formatting properly for SMSLenz
+
+      const response = await fetch('https://smslenz.lk/api/send-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: '1553',
+          api_key: 'e35daf6c-d086-4a9d-a6b9-9b5f43b9ed38',
+          sender_id: 'SMSlenzDEMO',
+          contact: `+${formattedPhone}`,
+          message: `Your Registration OTP is: ${otp}`
+        })
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+         throw new Error('Failed to send OTP SMS. ' + (result.message || ''));
+      }
+
+      setShowOtpModal(true);
+      showToast('OTP sent successfully to your mobile number!', 'success');
+
+    } catch (err) {
+      showToast(err.message || 'Operation failed. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyAndRegister = async () => {
+    if (userOtp !== generatedOtp) {
+      showToast('Invalid OTP. Please try again.', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
       // 2. Auth Sign Up
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
@@ -142,7 +194,7 @@ export default function Register() {
               school: formData.school,
               grade: formData.grade,
               year: formData.year,
-              subject: formData.subject.join(', '), // Save as comma separated string
+              subject: formData.subject.join(', '),
               district: formData.district,
               town: formData.town,
               address: formData.address,
@@ -151,12 +203,11 @@ export default function Register() {
           ]);
 
         if (profileError) {
-            // Ideally we should delete the auth user here if profile creation fails
-            // but for simplicity and safety we've checked the main constraints above.
             throw profileError;
         }
       }
       
+      setShowOtpModal(false);
       showToast('Congratulations! Account created successfully. Redirecting to login...', 'success');
       setTimeout(() => { navigate('/login'); }, 2500);
 
@@ -314,6 +365,41 @@ export default function Register() {
             </div>
         </div>
       </div>
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div className="card glass-premium" style={{ width: '90%', maxWidth: '400px', backgroundColor: 'var(--color-surface)', padding: '2rem', textAlign: 'center' }}>
+            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1rem', color: 'var(--color-text)' }}>Verify Mobile Number</h3>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>We sent a 6-digit OTP to your Mobile number.</p>
+            <input 
+              type="text" 
+              maxLength="6" 
+              value={userOtp} 
+              onChange={(e) => setUserOtp(e.target.value.replace(/\D/g, ''))}
+              placeholder="Enter OTP" 
+              className="input-field" 
+              style={{ textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.25em', marginBottom: '1.5rem' }}
+            />
+            <button 
+              onClick={verifyAndRegister} 
+              disabled={loading || userOtp.length !== 6} 
+              className="btn btn-primary" 
+              style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', fontWeight: 800 }}
+            >
+              {loading ? 'Verifying...' : 'Verify & Complete'}
+            </button>
+            <button 
+              onClick={() => setShowOtpModal(false)}
+              className="btn btn-secondary" 
+              style={{ width: '100%', marginTop: '0.5rem', padding: '0.75rem', backgroundColor: 'transparent', color: 'var(--color-text-muted)', border: 'none' }}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
