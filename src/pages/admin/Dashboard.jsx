@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Users, Video, BookOpen, AlertCircle, Search, MapPin, Phone, UserCheck, CreditCard, ChevronRight, Trash2, LayoutGrid, DollarSign, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
+import { sendSMS } from '../../utils/smsGateway';
 
 export default function AdminDashboard() {
   const { showToast } = useToast();
@@ -176,6 +177,12 @@ export default function AdminDashboard() {
 
         const { error: dbError } = await supabase.from('instructor_payments').insert([{ instructor_id: instructorId, slip_url: publicUrl, status: 'pending' }]);
         if (dbError) throw dbError;
+
+        try {
+            await sendSMS('0721803785', `Nexus LMS: New Commission Payment Recieved! Professor ${profileName} has uploaded a monthly payment slip. Please check the sales hub to approve.`);
+        } catch (smsErr) {
+            console.error("SMS notification failed:", smsErr);
+        }
 
         showToast("Receipt uploaded! Admin will verify it soon.", 'success');
         window.location.reload();

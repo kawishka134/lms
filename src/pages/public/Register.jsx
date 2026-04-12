@@ -112,15 +112,16 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // 1. CRITICAL: Check if phone OR NIC already exists in PROFILES to prevent duplicates before Auth
+      // 1. CRITICAL: Check if NIC already exists in PROFILES to prevent duplicates before Auth
+      // phone check is temporarily disabled for testing upon user request
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
-        .or(`phone.eq.${formData.phone},nic.eq.${formData.nic}`)
+        .eq('nic', formData.nic)
         .single();
 
       if (existingProfile) {
-        throw new Error('Phone number or NIC is already registered. Please login or use different details.');
+        throw new Error('NIC is already registered. Please login or use different details.');
       }
 
       // Generate 6-digit OTP
