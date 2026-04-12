@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Search, FileText, RotateCcw, ShoppingBag, Users, GraduationCap, History, DollarSign, Video } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
+import { sendSMS } from '../../utils/smsGateway';
 
 export default function Approvals() {
   const [pendingSlips, setPendingSlips] = useState([]);
@@ -114,29 +115,7 @@ export default function Approvals() {
     return () => supabase.removeChannel(ch);
   }, []);
 
-  const sendSMS = async (record) => {
-    const phone = record.profiles?.phone;
-    if (!phone) return;
 
-    // Normalize phone number (Ensure it starts with 94)
-    let cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.startsWith('0')) cleanPhone = '94' + cleanPhone.substring(1);
-    if (!cleanPhone.startsWith('94')) cleanPhone = '94' + cleanPhone;
-
-    const item = record.courses || record.tutes;
-    const message = `Nexus LMS: Hi ${record.profiles.full_name}, Your payment for (${item.title}) is APPROVED. You can log in now!`;
-
-    try {
-        // This is the common Notify.lk API structure
-        // User needs to replace API_KEY and USER_ID with their actual credentials
-        const url = `https://app.notify.lk/api/v1/send?api_key=REPLACE_WITH_YOUR_KEY&user_id=REPLACE_WITH_YOUR_USER_ID&sender_id=NotifyLK&to=${cleanPhone}&message=${encodeURIComponent(message)}`;
-        
-        const resp = await fetch(url);
-        console.log("SMS Send Attempted:", await resp.json());
-    } catch (e) {
-        console.error("SMS failed:", e);
-    }
-  };
 
   const handleAction = async (table, id, newStatus) => {
     try {
@@ -159,14 +138,24 @@ export default function Approvals() {
         const { error } = await supabase.from(table).update(updateData).eq('id', id);
         if (error) throw error;
 
-/* 
         // Auto Send SMS to Student
         if (newStatus === 'approved' && (table === 'enrollments' || table === 'tute_enrollments')) {
             const source = table === 'enrollments' ? pendingSlips : tuteSlips;
             const target = source.find(s => s.id === id);
-            if (target) sendSMS(target);
+            if (target && target.profiles?.phone) {
+                const item = target.courses || target.tutes;
+                const message = `Nexus LMS: Hi ${target.profiles.full_name}, Your payment for (${item?.title}) is APPROVED. You can log in now!`;
+                await sendSMS(target.profiles.phone, message);
+            }
         }
-        */
+
+        if (newStatus === 'approved' && table === 'recording_access_requests') {
+            const target = videoRequests.find(v => v.id === id);
+            if (target && target.profiles?.phone) {
+                const message = `Nexus: Sir approved your request for (${target.recordings?.title}). You can watch it now! It will automatically lock again in 5 hours.`;
+                await sendSMS(target.profiles.phone, message);
+            }
+        }
 
         if (table === 'instructor_payments') {
             const { data: payRecord } = await supabase.from('instructor_payments').select('instructor_id').eq('id', id).single();

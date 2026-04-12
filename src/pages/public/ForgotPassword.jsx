@@ -1,60 +1,110 @@
 import { useState } from 'react';
-import { Mail, CheckCircle } from 'lucide-react';
+import { Mail, CheckCircle, Phone, KeyRound, UserCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
+import { sendSMS } from '../../utils/smsGateway';
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [email, setEmail] = useState('');
-  const [instructorMode, setInstructorMode] = useState(false);
+  
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState(''); // Used internally for student, or manually for instructor
+  
+  const [isTeacherFlow, setIsTeacherFlow] = useState(false);
+  
+  // Instructor States
   const [requestedPassword, setRequestedPassword] = useState('');
   const [adminRequestSent, setAdminRequestSent] = useState(false);
+  const [instructorValidated, setInstructorValidated] = useState(false);
 
-  // Constants
-  const isInstructor = instructorMode;
+  // Student OTP States
+  const [step, setStep] = useState(1); // 1: Send OTP, 2: Verify OTP
+  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [enteredOtp, setEnteredOtp] = useState('');
 
-  const handleResetRequest = async (e) => {
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setSuccess(false);
     
     try {
-      // 1. Check if this is an Instructor or Student
-      const { data: inst } = await supabase.from('instructors').select('id, name').ilike('email', email).maybeSingle();
+      let cleanPhone = phone.replace(/\D/g, '');
+      if (cleanPhone.startsWith('0')) cleanPhone = '94' + cleanPhone.substring(1);
+      if (!cleanPhone.startsWith('94')) cleanPhone = '94' + cleanPhone;
 
-      if (inst) {
-          // If Instructor - They must ask for admin approval
-          setInstructorMode(true);
-          setLoading(false);
-          return;
+      const { data: profile, error: dbErr } = await supabase.from('profiles').select('email, phone, full_name').eq('phone', cleanPhone).maybeSingle();
+      
+      if (dbErr) throw dbErr;
+
+      if (profile && profile.email) {
+          setEmail(profile.email);
+          const otp = Math.floor(100000 + Math.random() * 900000).toString();
+          setGeneratedOtp(otp);
+          await sendSMS(cleanPhone, `Nexus LMS: Hello ${profile.full_name}, Your password reset OTP is ${otp}. Do not share this code.`);
+          setStep(2);
+      } else {
+          setError("Mobile number not found. If you are a teacher, use the Teacher flow.");
       }
-
-      // 2. If Student - Normal self-reset link
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/reset-password',
-      });
-      
-      if (error) throw error;
-      setSuccess(true);
-      
     } catch (err) {
-      setError(err.message || 'Failed to send reset email.');
+      setError("Failed to verify number: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+        if (enteredOtp !== generatedOtp) {
+            throw new Error("Invalid OTP code. Please try again.");
+        }
+
+        const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/reset-password',
+        });
+        
+        if (resetErr) throw resetErr;
+        setSuccess(true);
+        setStep(3);
+    } catch (err) {
+        setError(err.message);
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  const handleTeacherEmailCheck = async (e) => {
+      e.preventDefault();
+      setLoading(true);
+      setError('');
+      try {
+          const { data: inst } = await supabase.from('instructors').select('id, name').ilike('email', email).maybeSingle();
+          if (inst) {
+              setInstructorValidated(true);
+          } else {
+              setError("Instructor email not found. Please check spelling.");
+          }
+      } catch (err) {
+          setError(err.message);
+      } finally {
+          setLoading(false);
+      }
+  };
+
   const handleAdminApprovalRequest = async (e) => {
       e.preventDefault();
       setLoading(true);
+      setError('');
       try {
-          if (!requestedPassword || requestedPassword.length < 6) {
-              throw new Error("Please enter a new password you want (min 6 chars).");
-          }
+          if (!requestedPassword || requestedPassword.length < 6) throw new Error("Password must be at least 6 characters.");
 
-          const { error } = await supabase
+          const { error: updateErr } = await supabase
               .from('instructors')
               .update({
                   new_password_requested: requestedPassword,
@@ -62,7 +112,7 @@ export default function ForgotPassword() {
               })
               .ilike('email', email);
           
-          if (error) throw error;
+          if (updateErr) throw updateErr;
           setAdminRequestSent(true);
       } catch (err) {
           setError(err.message);
@@ -76,10 +126,12 @@ export default function ForgotPassword() {
       <div className="card" style={{ width: '100%', maxWidth: '450px', backgroundColor: 'var(--color-surface)', border: 'none' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '2.5rem', textAlign: 'center' }}>
            <div style={{ width: '64px', height: '64px', backgroundColor: 'var(--color-warning)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1rem', color: 'white', boxShadow: '0 4px 14px 0 rgba(245, 158, 11, 0.39)' }}>
-               <Mail size={36} />
+               {isTeacherFlow ? <UserCircle size={36} /> : <Phone size={36} />}
            </div>
            <h1 style={{ fontSize: '2rem', margin: 0, fontWeight: 900, letterSpacing: '-0.025em' }}>Passcode Recovery</h1>
-           <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem', fontWeight: 500, fontSize: '1.05rem' }}>Enter your email to receive a secure link.</p>
+           <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem', fontWeight: 500, fontSize: '1.05rem' }}>
+               {isTeacherFlow ? 'Teacher Account Recovery' : 'Verify your phone number with OTP.'}
+           </p>
         </div>
 
         {error && (
@@ -100,60 +152,81 @@ export default function ForgotPassword() {
             <div style={{ textAlign: 'center' }}>
                 <div style={{ backgroundColor: 'var(--color-success-bg)', color: 'var(--color-success)', padding: '1.5rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontSize: '1rem', fontWeight: 700, border: '1px solid rgba(16, 185, 129, 0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                     <CheckCircle size={40} />
-                    Reset link securely dispatched! Please check your email inbox (and spam folder).
+                    OTP Verified! A secure password reset link has been dispatched to your email inbox. Please click it to set your new password.
                 </div>
                 <Link to="/login" className="btn btn-outline" style={{ width: '100%', justifyContent: 'center' }}>Back to Login</Link>
             </div>
-        ) : instructorMode ? (
-            <form onSubmit={handleAdminApprovalRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid var(--color-warning)', marginBottom: '0.5rem' }}>
-                  <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#92400e' }}>
-                      <b>Teacher Flow:</b> Your account is strictly managed. Please enter the new password you want below. The Admin will verify and activate it.
-                  </p>
-              </div>
-              <div>
-                <label className="input-label">Instructor Email</label>
-                <input className="input-field" type="email" value={email} disabled style={{ backgroundColor: '#f1f5f9', opacity: 0.7 }} />
-              </div>
-              <div>
-                <label className="input-label">Desirable New Password</label>
-                <input 
-                    type="text" 
-                    className="input-field" 
-                    placeholder="Minimum 6 characters" 
-                    value={requestedPassword}
-                    onChange={(e) => setRequestedPassword(e.target.value)}
-                    required 
-                    minLength={6}
-                    style={{ marginBottom: 0 }}
-                />
-              </div>
-              <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem', fontSize: '1.125rem', opacity: loading ? 0.7 : 1 }}>
-                  {loading ? 'Submitting Request...' : 'Send Password to Admin'}
-              </button>
-              <button type="button" onClick={() => { setInstructorMode(false); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>Not an Instructor? Go back</button>
-            </form>
+        ) : isTeacherFlow ? (
+            !instructorValidated ? (
+                <form onSubmit={handleTeacherEmailCheck} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid var(--color-warning)', marginBottom: '0.5rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#92400e' }}>
+                            <b>Teacher Flow:</b> Your account is strictly managed. Please enter your email to proceed.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="input-label">Instructor Email</label>
+                        <input className="input-field" type="email" placeholder="sir@nexus.lk" value={email} onChange={e => setEmail(e.target.value)} required style={{ marginBottom: 0 }} />
+                    </div>
+                    <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem' }}>
+                        {loading ? 'Checking...' : 'Continue'}
+                    </button>
+                    <button type="button" onClick={() => { setIsTeacherFlow(false); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>I am a Student</button>
+                </form>
+            ) : (
+                <form onSubmit={handleAdminApprovalRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ backgroundColor: '#f8fafc', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid var(--color-success)', marginBottom: '0.5rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>
+                            Account verified. Enter your desired new password below. It will be sent to the Admin for final approval.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="input-label">Desirable New Password</label>
+                        <input type="text" className="input-field" placeholder="Minimum 6 characters" value={requestedPassword} onChange={e => setRequestedPassword(e.target.value)} required minLength={6} style={{ marginBottom: 0 }} />
+                    </div>
+                    <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem' }}>
+                        {loading ? 'Submitting...' : 'Send Password to Admin'}
+                    </button>
+                </form>
+            )
         ) : (
-            <form onSubmit={handleResetRequest} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div>
-                <label className="input-label">Student Email Address</label>
-                <input 
-                    type="email" 
-                    className="input-field" 
-                    placeholder="kamal@gmail.com" 
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required 
-                    style={{ marginBottom: 0 }}
-                />
-              </div>
-              <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem', fontSize: '1.125rem', opacity: loading ? 0.7 : 1 }}>
-                  {loading ? 'Sending Request...' : 'Send Magic Reset Link'}
-              </button>
-            </form>
+            // STUDENT FLOW
+            step === 1 ? (
+                <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ backgroundColor: 'rgba(56, 189, 248, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px dashed #38bdf8', marginBottom: '0.5rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#0369a1' }}>
+                            Enter your registered mobile number. We will send you an OTP to verify your identity.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="input-label">Student Mobile Number</label>
+                        <input type="tel" className="input-field" placeholder="07XXXXXXXX" value={phone} onChange={e => setPhone(e.target.value)} required style={{ marginBottom: 0 }} />
+                    </div>
+                    <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem', fontSize: '1.125rem' }}>
+                        {loading ? 'Sending OTP...' : 'Send OTP Code'}
+                    </button>
+                    <button type="button" onClick={() => { setIsTeacherFlow(true); setError(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>I am a Teacher</button>
+                </form>
+            ) : (
+                <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(16, 185, 129, 0.2)', marginBottom: '0.5rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#047857' }}>
+                            We sent a 6-digit OTP to your phone. Enter it below.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="input-label">OTP Code</label>
+                        <input type="text" className="input-field" placeholder="123456" value={enteredOtp} onChange={e => setEnteredOtp(e.target.value)} required maxLength={6} style={{ marginBottom: 0, letterSpacing: '8px', fontSize: '1.25rem', textAlign: 'center', fontWeight: 800 }} />
+                    </div>
+                    <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem', fontSize: '1.125rem' }}>
+                        {loading ? 'Verifying...' : 'Verify & Send Reset Link'}
+                    </button>
+                    <button type="button" onClick={() => { setStep(1); setEnteredOtp(''); setGeneratedOtp(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 700 }}>Resend OTP / Change Number</button>
+                </form>
+            )
         )}
         
-        {!success && (
+        {!success && !adminRequestSent && (
             <div style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.95rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
               Remember your password? <Link to="/login" style={{ color: 'var(--color-primary)', fontWeight: 700 }}>Log in</Link>
             </div>

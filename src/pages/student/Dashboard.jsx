@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Clock, AlertCircle, PlayCircle, Video, FileText, Phone, ShieldCheck,
-  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles
+  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
+import { sendSMS } from '../../utils/smsGateway';
 
 const WatermarkVideo = ({ videoId, title, studentProfile }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -457,6 +458,28 @@ export default function Dashboard() {
 
         if (upsertError) throw upsertError;
 
+        // SMS Notifications
+        const courseInfo = availableCourses.find(c => c.id === selectedCourseId);
+        if (courseInfo) {
+            try {
+                // Fetch Instructor
+                if (courseInfo.instructor_id) {
+                    const { data: instructorData } = await supabase.from('instructors').select('phone, name').eq('id', courseInfo.instructor_id).single();
+                    if (instructorData?.phone) {
+                        const sirMessage = `Nexus: Student ${studentProfile.full_name} has paid for ${courseInfo.title}. Pls verify in Dashboard.`;
+                        await sendSMS(instructorData.phone, sirMessage);
+                    }
+                }
+                // Notify Student
+                if (studentProfile?.phone) {
+                    const stuMessage = `Nexus: Dear ${studentProfile.full_name}, your slip for ${courseInfo.title} is sent to sir for approval.`;
+                    await sendSMS(studentProfile.phone, stuMessage);
+                }
+            } catch (smsErr) {
+                console.error("Dashboard Payment SMS Error:", smsErr);
+            }
+        }
+
         setShowUploadModal(false);
         showGlobalToast("Receipt uploaded! Admin will approve it shortly.", 'success');
         window.location.reload(); 
@@ -490,6 +513,23 @@ export default function Dashboard() {
       // Refresh tute enrollments
       const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
       if(myTutes) setTuteEnrollments(myTutes);
+
+      // SMS Notifications
+      try {
+          if (selectedTute.instructor_id) {
+              const { data: instructorData } = await supabase.from('instructors').select('phone, name').eq('id', selectedTute.instructor_id).single();
+              if (instructorData?.phone) {
+                  const sirMessage = `Nexus: Student ${studentProfile.full_name} has paid for Tute (${selectedTute.title}). Pls verify.`;
+                  await sendSMS(instructorData.phone, sirMessage);
+              }
+          }
+          if (studentProfile?.phone) {
+              const stuMessage = `Nexus: Your payment for Tute (${selectedTute.title}) has been sent for approval.`;
+              await sendSMS(studentProfile.phone, stuMessage);
+          }
+      } catch (smsErr) {
+          console.error("Dashboard Tute SMS Error:", smsErr);
+      }
 
       setShowTuteModal(false);
       setSelectedTute(null);
@@ -734,6 +774,19 @@ export default function Dashboard() {
                     });
                     
                     if (error) throw error;
+
+                    if (!isSelfUnlock) {
+                        try {
+                            const recInfo = recordings.find(r => r.id === recId);
+                            if (recInfo?.instructor_id) {
+                                const { data: inst } = await supabase.from('instructors').select('phone').eq('id', recInfo.instructor_id).single();
+                                if (inst?.phone) {
+                                    await sendSMS(inst.phone, `Nexus: Student ${studentProfile.full_name} requested access for recording (${recInfo.title}). Pls confirm.`);
+                                }
+                            }
+                        } catch(err) { console.error("Rec SMS Error:", err); }
+                    }
+
                     showGlobalToast(isSelfUnlock ? "පැය 5කට වීඩියෝව Unlock වුණා! (One-time Access Granted for 5h)" : "අනුමැතිය සඳහා ගුරුවරයා වෙත යොමු කළා! (Recording Request Sent to Instructor)", 'success');
                     
                     const { data: updated } = await supabase.from('recording_access_requests').select('*').eq('student_id', studentProfile.id);
