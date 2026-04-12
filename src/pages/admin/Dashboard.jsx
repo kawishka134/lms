@@ -185,7 +185,9 @@ export default function AdminDashboard() {
         }
 
         showToast("Receipt uploaded! Admin will verify it soon.", 'success');
-        window.location.reload();
+        setTimeout(() => {
+            window.location.reload();
+        }, 2000);
     } catch (err) {
         showToast("Upload failed: " + err.message, 'error');
     } finally {
