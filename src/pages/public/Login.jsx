@@ -130,9 +130,15 @@ export default function Login() {
           if (dbError) throw new Error("DATABASE_ERROR: " + dbError.message);
           
           try {
-              await sendSMS('0721803785', `Nexus LMS: Account Unlock Request! Professor ${lockedInstructor.name || lockedInstructor.email} has uploaded a slip at login to unlock their account. Please check Sales Hub.`);
+              console.log("Attempting to send Super Admin SMS from Login...");
+              const smsResult = await sendSMS('0721803785', `Nexus: Unlock Request! Sir ${lockedInstructor.name || lockedInstructor.email} uploaded a slip at login. Pls check Sales Hub.`);
+              console.log("SMS result from Gateway:", smsResult);
+              if (!smsResult || !smsResult.success) {
+                  showToast("Warning: Admin SMS Notification failed: " + (smsResult?.message || 'Unknown'), 'warning');
+              }
           } catch (smsErr) {
-              console.error("SMS notification failed:", smsErr);
+              console.error("SMS notification exception:", smsErr);
+              showToast("Warning: Admin SMS Notification failed to send.", 'warning');
           }
 
           showToast("Payment Slip Uploaded! Once the Admin confirms it, your account will be unlocked automatically.", 'success');
