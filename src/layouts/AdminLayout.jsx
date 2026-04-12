@@ -10,7 +10,7 @@ import { supabase } from '../lib/supabase';
 export default function AdminLayout() {
   const location = useLocation();
   const [profileName, setProfileName] = useState('Nexus Admin');
-  const [notifications, setNotifications] = useState({ approvals: 0, payments: 0, recordings: 0, tutes: 0 });
+  const [notifications, setNotifications] = useState({ approvals: 0, payments: 0, recordings: 0, tutes: 0, commissions: 0 });
 
   const adminRole = localStorage.getItem('admin_role');
   const instructorId = localStorage.getItem('instructor_id');
@@ -32,11 +32,12 @@ export default function AdminLayout() {
             let enrollQuery = supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
             // 2. Recording Requests
             let recQuery = supabase.from('recording_access_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-            // 3. Tute Requests
             let tuteQuery = supabase
                 .from('tute_enrollments')
                 .select('id, tutes!inner(instructor_id)', { count: 'exact', head: true })
                 .eq('status', 'pending');
+            // 4. Instructor Commission Payments
+            let commQuery = supabase.from('instructor_payments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
 
             if (adminRole === 'instructor' && instructorId) {
                 const { data: myCourses } = await supabase.from('courses').select('id').eq('instructor_id', instructorId);
@@ -53,13 +54,15 @@ export default function AdminLayout() {
             
             const { count: enrollCount } = await enrollQuery;
             const { count: recCount } = await recQuery;
-            const { count: tuteCount } = tuteQuery ? await tuteQuery : { count: 0 };
+            const { count: tuteCount } = await tuteQuery;
+            const { count: commCount } = isSuperAdmin ? await commQuery : { count: 0 };
 
             setNotifications({
-                approvals: (enrollCount || 0) + (recCount || 0) + (tuteCount || 0),
+                approvals: (enrollCount || 0) + (recCount || 0) + (tuteCount || 0) + (commCount || 0),
                 payments: enrollCount || 0,
                 recordings: recCount || 0,
-                tutes: tuteCount || 0
+                tutes: tuteCount || 0,
+                commissions: commCount || 0
             });
         } catch (e) { console.error(e) }
     };
@@ -71,6 +74,7 @@ export default function AdminLayout() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchCounts())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchCounts())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchCounts())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'instructor_payments' }, () => fetchCounts())
         .subscribe();
 
     return () => supabase.removeChannel(channel);

@@ -29,6 +29,7 @@ export default function Analytics() {
                 // Get pending approvals
                 const { count: pendingEnrollments } = await supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
                 const { count: pendingTutes } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+                const { count: pendingCommissions } = await supabase.from('instructor_payments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
                 
                 // Fetch approved enrollments and tutes to calculate real revenue
                 const { data: approvedEnrollments } = await supabase.from('enrollments').select('created_at, course_id, courses(title, price)').eq('status', 'approved');
@@ -137,7 +138,7 @@ export default function Analytics() {
                     totalCommissions, // Platform Earnings (Actual Profit)
                     netProfit: totalCommissions, 
                     activeStudents: studentsCount || 0,
-                    pendingApprovals: (pendingEnrollments || 0) + (pendingTutes || 0),
+                    pendingApprovals: (pendingEnrollments || 0) + (pendingTutes || 0) + (pendingCommissions || 0),
                     totalClasses: classesCount || 0
                 });
             } catch (e) {

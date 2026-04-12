@@ -60,13 +60,17 @@ export default function AdminDashboard() {
             // Super Admin global counts
             const { count: sc } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'student');
             const { count: pc } = await supabase.from('enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            const { count: tc } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            const { count: vc } = await supabase.from('recording_access_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            const { count: cc } = await supabase.from('instructor_payments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            
             const { data: cd } = await supabase.from('courses').select('title, enrollments!inner (count)').eq('enrollments.status', 'approved');
 
             const { data: ps } = await supabase.from('enrollments').select('student_id').eq('status', 'approved');
             paidStudentsCount = new Set(ps?.map(e => e.student_id)).size;
 
             studentCount = sc || 0;
-            pendingCountValue = pc || 0;
+            pendingCountValue = (pc || 0) + (tc || 0) + (vc || 0) + (cc || 0);
             courseData = cd || [];
         }
 
