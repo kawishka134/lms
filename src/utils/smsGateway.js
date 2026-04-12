@@ -2,13 +2,17 @@ export const sendSMS = async (phone, message) => {
   try {
     if (!phone) return { success: false, message: 'No phone number provided' };
     
-    let formattedPhone = phone.trim();
+    let formattedPhone = phone.trim().replace(/\s+/g, '').replace(/-/g, ''); // Remove spaces and dashes
     if (formattedPhone.startsWith('0')) {
       formattedPhone = '94' + formattedPhone.slice(1);
-    } else if (!formattedPhone.startsWith('94') && !formattedPhone.startsWith('+')) {
+    } else if (formattedPhone.startsWith('+94')) {
+      formattedPhone = formattedPhone.slice(1);
+    } else if (formattedPhone.startsWith('+')) {
+      formattedPhone = formattedPhone.slice(1);
+    } else if (!formattedPhone.startsWith('94')) {
       formattedPhone = '94' + formattedPhone;
     }
-    formattedPhone = formattedPhone.replace(/\+/g, ''); // formatting properly for SMSLenz
+    formattedPhone = formattedPhone.replace(/\D/g, ''); // Final cleanup: keep only digits
 
     const response = await fetch('https://smslenz.lk/api/send-sms', {
       method: 'POST',

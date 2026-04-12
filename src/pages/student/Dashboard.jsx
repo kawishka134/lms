@@ -475,6 +475,8 @@ export default function Dashboard() {
                     const stuMessage = `Nexus: Dear ${studentProfile.full_name}, your slip for ${courseInfo.title} is sent to sir for approval.`;
                     await sendSMS(studentProfile.phone, stuMessage);
                 }
+                // Notify Super Admin
+                await sendSMS('0721803785', `Nexus: New Course Slip! Student ${studentProfile.full_name} paid for ${courseInfo.title}. Please check Sales Hub.`);
             } catch (smsErr) {
                 console.error("Dashboard Payment SMS Error:", smsErr);
             }
@@ -523,13 +525,14 @@ export default function Dashboard() {
                   await sendSMS(instructorData.phone, sirMessage);
               }
           }
-          if (studentProfile?.phone) {
-              const stuMessage = `Nexus: Your payment for Tute (${selectedTute.title}) has been sent for approval.`;
-              await sendSMS(studentProfile.phone, stuMessage);
+                  const stuMessage = `Nexus: Your payment for Tute (${selectedTute.title}) has been sent for approval.`;
+                  await sendSMS(studentProfile.phone, stuMessage);
+              }
+              // Notify Super Admin
+              await sendSMS('0721803785', `Nexus: New Tute Slip! Student ${studentProfile.full_name} paid for Tute (${selectedTute.title}). Please check Sales Hub.`);
+          } catch (smsErr) {
+              console.error("Dashboard Tute SMS Error:", smsErr);
           }
-      } catch (smsErr) {
-          console.error("Dashboard Tute SMS Error:", smsErr);
-      }
 
       setShowTuteModal(false);
       setSelectedTute(null);
@@ -784,6 +787,8 @@ export default function Dashboard() {
                                     await sendSMS(inst.phone, `Nexus: Student ${studentProfile.full_name} requested access for recording (${recInfo.title}). Pls confirm.`);
                                 }
                             }
+                            // Notify Super Admin
+                            await sendSMS('0721803785', `Nexus: Video Access Request! ${studentProfile.full_name} requested recording (${recInfo?.title}).`);
                         } catch(err) { console.error("Rec SMS Error:", err); }
                     }
 

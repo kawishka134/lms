@@ -183,7 +183,8 @@ export default function AdminDashboard() {
         if (dbError) throw dbError;
 
         try {
-            await sendSMS('0721803785', `Nexus LMS: New Commission Payment Recieved! Professor ${profileName} has uploaded a monthly payment slip. Please check the sales hub to approve.`);
+            const smsRes = await sendSMS('0721803785', `Nexus LMS: New Commission Slip! Professor ${profileName} has uploaded a monthly payment slip. Please check the Sales Hub to approve.`);
+            console.log("Super Admin SMS Notification Result:", smsRes);
         } catch (smsErr) {
             console.error("SMS notification failed:", smsErr);
         }
