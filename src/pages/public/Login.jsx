@@ -3,6 +3,7 @@ import { BookOpen, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
+import { sendSMS } from '../../utils/smsGateway';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export default function Login() {
       
       const { data: instructorCheck } = await supabase
           .from('instructors')
-          .select('id, email, access_expiry_date, is_blocked')
+          .select('id, name, email, access_expiry_date, is_blocked')
           .ilike('email', userEmail)
           .maybeSingle();
 
@@ -127,6 +128,12 @@ export default function Login() {
           }]);
           
           if (dbError) throw new Error("DATABASE_ERROR: " + dbError.message);
+          
+          try {
+              await sendSMS('0721803785', `Nexus LMS: Account Unlock Request! Professor ${lockedInstructor.name || lockedInstructor.email} has uploaded a slip at login to unlock their account. Please check Sales Hub.`);
+          } catch (smsErr) {
+              console.error("SMS notification failed:", smsErr);
+          }
 
           showToast("Payment Slip Uploaded! Once the Admin confirms it, your account will be unlocked automatically.", 'success');
           setLockedInstructor(null);
