@@ -301,7 +301,7 @@ export default function Dashboard() {
                 return;
              }
              if (session && session.user && isMounted) {
-                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
                  if (profile) {
                      setStudentProfile(profile);
                      if(profile.nic) setNicNumber(profile.nic);
@@ -404,8 +404,15 @@ export default function Dashboard() {
                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
                      if(myTutes && isMounted) setTuteEnrollments(myTutes);
 
-                     const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').single();
+                     const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
                      if(settings) setInstituteSettings(settings);
+                 } else {
+                     // NO PROFILE FOUND IN DB - forcefully log out this invalid session!
+                     await supabase.auth.signOut();
+                     localStorage.removeItem('admin_role');
+                     if (isMounted) {
+                         window.location.href = '/login';
+                     }
                  }
              }
          } catch(e) { console.error(e) }

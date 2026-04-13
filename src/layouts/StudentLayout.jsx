@@ -27,8 +27,10 @@ export default function StudentLayout() {
   const toggleTheme = () => setTheme(theme === 'light' ? 'dark' : 'light');
   
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/login');
+    try { await supabase.auth.signOut(); } catch (e) { console.error('Signout failed', e); }
+    localStorage.removeItem('admin_role');
+    localStorage.removeItem('instructor_id');
+    window.location.href = '/login';
   };
 
   const navLinks = [
