@@ -43,6 +43,30 @@ export default function Register() {
     'Moneragala', 'Ratnapura', 'Kegalle'
   ];
 
+  // Comprehensive list of major towns in Sri Lanka grouped by relevance or alphabet
+  const srilankaTowns = [
+    "Abalangoda", "Agalawatta", "Akurana", "Akuressa", "Alutgama", "Ambalangoda", "Ambalantota", "Ampara", "Anamaduwa", "Anuradhapura", "Aranayaka", "Avissawella",
+    "Baddegama", "Badulla", "Bakamoona", "Balangoda", "Bandaragama", "Bandarawela", "Battaramulla", "Batticaloa", "Beliatta", "Benthota", "Beruwala", "Biyagama", "Boralesgamuwa",
+    "Chavakachcheri", "Chilaw", "Chunnakam", "Colombo 1-15",
+    "Dambulla", "Dankotuwa", "Dehiowita", "Dehiwala", "Deniyaya", "Deraniyagala", "Dickwella", "Digana", "Diyatalawa", "Dombivli", "Drankotuwa",
+    "Eheliyagoda", "Ellakkala", "Elpitiya", "Embilipitiya", "Eppawala",
+    "Galenbindunuwewa", "Galgamuwa", "Galle", "Galnewa", "Gampaha", "Gampola", "Gelioya", "Ginigathena", "Giriulla", "Godakawela",
+    "Habarana", "Hakmana", "Hambantota", "Hanguranketha", "Hanwella", "Haputale", "Hatton", "Hikkaduwa", "Hingurakgoda", "Homagama", "Horana",
+    "Ja-Ela", "Jaffna",
+    "Kadawatha", "Kaduwela", "Kadugannawa", "Kahawatta", "Kakirawa", "Kalmunai", "Kalutara", "Kamburupitiya", "Kandana", "Kandy", "Karapitiya", "Katubedda", "Katugastota", "Katunayake", "Kegalle", "Kekirawa", "Kelaniya", "Kesbewa", "Kilinochchi", "Kiribathgoda", "Kirinda", "Kitulgala", "Kochi", "Koggala", "Kohuwala", "Kotagala", "Kotte", "Kuliyapitiya", "Kurunegala", "Kuruwita",
+    "Maharagama", "Mahiyanganaya", "Maho", "Malabe", "Mannar", "Maradana", "Marawila", "Matale", "Matara", "Mathugama", "Mau-ara", "Mawanella", "Medawachchiya", "Medirigiriya", "Meegoda", "Mihintale", "Minuwangoda", "Mirigama", "Moneragala", "Moratuwa", "Mount Lavinia", "Mullaitivu",
+    "Nallur", "Narammala", "Nattandiya", "Nawalapitiya", "Nawala", "Negombo", "Nelliady", "Nikaweratiya", "Nilaveli", "Nivithigala", "Nochchiyagama", "Nugegoda", "Nuwara Eliya",
+    "Opanayaka",
+    "Padukka", "Padiyathalawa", "Pagoda", "Pallepola", "Panadura", "Pannala", "Pannipitiya", "Passara", "Pasyala", "Peliyagoda", "Pelmadulla", "Peradeniya", "Piliyandala", "Point Pedro", "Polgahawela", "Polonnaruwa", "Puttalam",
+    "Ragama", "Rajagiriya", "Rambukkana", "Ratmalana", "Ratnapura", "Rattota", "Ruwanwella",
+    "Samanthurai", "Sigiriya", "Siyambalanduwa",
+    "Talawakele", "Talawa", "Tangalle", "Teldeniya", "Thalahena", "Thalawatugoda", "Thihariya", "Thimbirigasyaya", "Tissamaharama", "Trincomalee",
+    "Udugama", "Ukuwela", "Unawatuna", "Urubokka",
+    "Vavuniya", "Veyangoda",
+    "Wadduwa", "Walapane", "Warakapola", "Wariyapola", "Waskaduwa", "Wathelgoda", "Wattala", "Wattegama", "Welimada", "Weligama", "Welisara", "Wellampitiya", "Wellawaya", "Wellawatte", "Wennappuwa",
+    "Yakkala", "Yatawatta", "Yatiyanthota"
+  ];
+
   const validateNIC = (nic) => {
     // 1. Structural Check
     const oldNicRegex = /^[0-9]{9}[vVxX]$/;
@@ -344,7 +368,11 @@ export default function Register() {
                 <datalist id="districts-list">{srilankaDistricts.map(d => <option key={d} value={d} />)}</datalist>
             </div>
 
-            <div><label className="input-label">Town</label><input name="town" type="text" className="input-field" placeholder="Your City" required onChange={handleChange} /></div>
+            <div>
+                <label className="input-label">Town</label>
+                <input name="town" list="towns-list" className="input-field" placeholder="Your City" required onChange={handleChange} />
+                <datalist id="towns-list">{srilankaTowns.map(t => <option key={t} value={t} />)}</datalist>
+            </div>
 
             <div style={{ gridColumn: '1 / -1' }}><label className="input-label">Home Address (For Tutes)</label><textarea name="address" className="input-field" rows="2" placeholder="Full address including house number..." required onChange={handleChange} /></div>
             <div style={{ gridColumn: '1 / -1' }}><label className="input-label">Create Password</label><input name="password" type="password" className="input-field" placeholder="Choose a strong password (min 6 chars)" minLength={6} required onChange={handleChange} /></div>

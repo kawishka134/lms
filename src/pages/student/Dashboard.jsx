@@ -1256,25 +1256,25 @@ export default function Dashboard() {
           ))}
       </nav>
       {showUploadModal && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)', padding: '1rem' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '1100px', height: 'auto', maxHeight: '95vh', overflowY: 'auto', position: 'relative', padding: '2rem', background: 'white', color: '#0f172a', borderRadius: '24px', border: '5px solid #eee', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2.5rem' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', padding: '1rem' }}>
+          <div className="card shadow-premium" style={{ width: '100%', maxWidth: '1100px', height: 'auto', maxHeight: '95vh', overflowY: 'auto', position: 'relative', padding: window.innerWidth < 768 ? '1.5rem' : '2.5rem', background: 'white', color: '#0f172a', borderRadius: '32px', display: 'grid', gridTemplateColumns: window.innerWidth < 992 ? '1fr' : '1.1fr 0.9fr', gap: '2.5rem' }}>
             
-            <button onClick={() => setShowUploadModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', zIndex: 10 }}><X size={28} /></button>
+            <button onClick={() => setShowUploadModal(false)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', zIndex: 10, width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={24} /></button>
 
             {/* Left Section: Video Info */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                   <Video size={24} color="var(--color-primary)" />
-                   <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>About this Class</h2>
+                   <div style={{ color: 'var(--color-primary)', display: 'flex' }}><Video size={28} /></div>
+                   <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>About this Class</h2>
                 </div>
 
-                <div style={{ width: '100%', aspectRatio: '16/9', background: '#000', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 15px 30px rgba(0,0,0,0.1)', border: '1px solid #eee' }}>
+                <div style={{ width: '100%', aspectRatio: '16/9', background: '#000', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.15)', border: '1px solid #eee' }}>
                      {(() => {
                         const course = availableCourses.find(c => c.id === selectedCourseId);
                         const videoUrl = course?.promo_video_url;
                         if (!videoUrl) return (
-                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.2 }}>
-                                <PlayCircle size={64} />
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.1 }}>
+                                <PlayCircle size={80} />
                             </div>
                         );
 
@@ -1282,7 +1282,7 @@ export default function Dashboard() {
                         if (ytId) {
                             return (
                                 <iframe 
-                                    src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`}
+                                    src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&rel=0&modestbranding=1&loop=1&playlist=${ytId}`}
                                     style={{ width: '100%', height: '100%', border: 'none' }}
                                     title="Promo Video"
                                     allow="autoplay; encrypted-media"
@@ -1290,35 +1290,33 @@ export default function Dashboard() {
                                 />
                             );
                         }
-                        return <video src={videoUrl} autoPlay loop playsInline controls style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
+                        return <video src={videoUrl} autoPlay muted loop playsInline controls style={{ width: '100%', height: '100%', objectFit: 'contain' }} />;
                      })()}
                 </div>
 
-                {availableCourses.find(c => c.id === selectedCourseId)?.free_lesson_url && (
-                    <div style={{ padding: '1.5rem', borderRadius: '20px', border: '2px solid #22c55e', backgroundColor: '#f0fdf4', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center' }}>
-                         <div style={{ background: '#22c55e', color: 'white', padding: '0.4rem 1rem', borderRadius: '50px', fontSize: '0.75rem', fontWeight: 900, textTransform: 'uppercase' }}>Limited Time Access</div>
-                         <h3 style={{ margin: 0, fontWeight: 800 }}>Watch a Free Demo Lesson</h3>
-                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#166534', opacity: 0.8 }}>Check the teaching style before you enroll.</p>
-                         <button 
-                            onClick={() => { setShowUploadModal(false); setSelectedVideo({ url: availableCourses.find(c => c.id === selectedCourseId).free_lesson_url, title: `Demo: ${availableCourses.find(c => c.id === selectedCourseId).title}` }); }}
-                            className="btn btn-primary" 
-                            style={{ background: '#22c55e', width: '100%', gap: '0.75rem' }}
-                         >
-                            <PlayCircle size={20} /> Watch Free Lesson
-                         </button>
-                    </div>
-                )}
+                <div style={{ padding: '2rem', borderRadius: '24px', border: '2px solid #22c55e', backgroundColor: '#f0fdf4', display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', textAlign: 'center' }}>
+                     <div style={{ background: '#22c55e', color: 'white', padding: '0.5rem 1.25rem', borderRadius: '50px', fontSize: '0.8rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Limited Time Access</div>
+                     <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.5rem', color: '#14532d' }}>Watch a Free Demo Lesson</h3>
+                     <p style={{ margin: 0, fontSize: '0.95rem', color: '#166534', fontWeight: 600 }}>Check the teaching style before you enroll.</p>
+                     <button 
+                        onClick={() => { setShowUploadModal(false); setSelectedVideo({ url: availableCourses.find(c => c.id === selectedCourseId).free_lesson_url, title: `Demo: ${availableCourses.find(c => c.id === selectedCourseId).title}` }); }}
+                        className="btn btn-primary" 
+                        style={{ background: '#22c55e', width: '100%', height: '56px', fontSize: '1.1rem', gap: '0.75rem', marginTop: '0.5rem', color: 'white' }}
+                     >
+                        <PlayCircle size={22} fill="white" /> Watch Free Lesson
+                     </button>
+                </div>
             </div>
 
             {/* Right Section: Form */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                   <CreditCard size={24} color="#0ea5e9" />
-                   <h2 style={{ fontSize: '1.5rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>Secure Payment</h2>
+                   <div style={{ color: '#0ea5e9', display: 'flex' }}><CreditCard size={28} /></div>
+                   <h2 style={{ fontSize: '1.75rem', fontWeight: 900, margin: 0, color: '#0f172a', letterSpacing: '-0.02em' }}>Secure Payment</h2>
                 </div>
 
-                <div style={{ background: '#f0f9ff', padding: '1.5rem', borderRadius: '20px', borderLeft: '6px solid #0ea5e9', marginBottom: '0.5rem' }}>
-                    <p style={{ margin: 0, fontWeight: 700, color: '#0369a1', lineHeight: '1.7', fontSize: '0.95rem' }}>
+                <div style={{ background: '#f0f9ff', padding: '1.75rem', borderRadius: '24px', borderLeft: '8px solid #0ea5e9', marginBottom: '0.5rem', boxShadow: '0 4px 12px rgba(14, 165, 233, 0.05)' }}>
+                    <p style={{ margin: 0, fontWeight: 800, color: '#0369a1', lineHeight: '1.8', fontSize: '1rem' }}>
                         ⚠️ බැංකු රිසිට් පතේ (Slip) පෑනෙන් පැහැදිලිව පහත විස්තර ලියන්න:<br/>
                         1. ඔබේ සම්පූර්ණ නම<br/>
                         2. පන්තියේ නම<br/>
@@ -1326,12 +1324,11 @@ export default function Dashboard() {
                     </p>
                 </div>
 
-                {/* Bank Payment Details - Multiple Account Support */}
+                {/* Bank Payment Details Card */}
                 {(() => {
                     const course = availableCourses.find(c => c.id === selectedCourseId);
                     if (!course) return null;
 
-                    // Support both new instructor-linked array and legacy course-defined single data
                     const instructorBanks = course.instructors?.bank_accounts || [];
                     const hasMultiBanks = instructorBanks.length > 0;
                     
@@ -1347,37 +1344,36 @@ export default function Dashboard() {
                     if (!activeBank.account_no && !hasMultiBanks) return null;
 
                     return (
-                        <div className="glass-premium" style={{ border: '2px solid #22c55e', borderRadius: '24px', padding: '1.5rem', background: 'linear-gradient(145deg, #f0fdf4 0%, #ffffff 100%)', boxShadow: '0 10px 25px rgba(34, 197, 94, 0.1)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                    <div style={{ width: '42px', height: '42px', backgroundColor: '#16a34a', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem' }}>🏦</div>
-                                    <div>
-                                        <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
-                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>Select a Bank Account to Pay</p>
-                                    </div>
+                        <div style={{ border: '2.5px solid #22c55e', borderRadius: '28px', padding: '1.75rem', background: 'linear-gradient(145deg, #f0fdf4 0%, #ffffff 100%)', boxShadow: '0 12px 30px rgba(34, 197, 94, 0.08)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                <div style={{ width: '48px', height: '48px', backgroundColor: '#16a34a', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.6rem' }}>🏦</div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem', color: '#14532d' }}>ගෙවීමේ බැංකු විස්තර</h3>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#16a34a', fontWeight: 700 }}>Select a Bank Account to Pay</p>
                                 </div>
                             </div>
 
                             {/* Bank Selection Tabs */}
                             {hasMultiBanks && instructorBanks.length > 1 && (
-                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                                <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
                                     {instructorBanks.map((bank, idx) => (
                                         <button 
                                             key={bank.id}
                                             type="button"
                                             onClick={() => setActiveBankIdx(idx)}
                                             style={{ 
-                                                padding: '0.5rem 1rem', 
+                                                padding: '0.6rem 1.25rem', 
                                                 borderRadius: '50px', 
                                                 border: '2px solid',
                                                 borderColor: activeBankIdx === idx ? '#16a34a' : '#e2e8f0',
                                                 background: activeBankIdx === idx ? '#16a34a' : 'white',
                                                 color: activeBankIdx === idx ? 'white' : '#64748b',
-                                                fontSize: '0.8rem',
+                                                fontSize: '0.85rem',
                                                 fontWeight: 800,
                                                 whiteSpace: 'nowrap',
                                                 cursor: 'pointer',
-                                                transition: 'all 0.2s'
+                                                transition: 'all 0.2s',
+                                                boxShadow: activeBankIdx === idx ? '0 4px 12px rgba(22, 163, 74, 0.2)' : 'none'
                                             }}
                                         >
                                             {bank.bank_name || `Account ${idx + 1}`}
@@ -1386,46 +1382,47 @@ export default function Dashboard() {
                                 </div>
                             )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                                 {[
-                                    { label: 'Bank Name / බැංකුව', value: activeBank.bank_name },
-                                    { label: 'Account Number / ගිණුම් අංකය', value: activeBank.account_no || activeBank.bank_account_no },
-                                    { label: 'Account Name / නම', value: activeBank.account_name || activeBank.bank_account_name },
-                                    { label: 'Branch / ශාඛාව', value: activeBank.branch || activeBank.bank_branch },
+                                    { label: 'BANK NAME / බැංකුව', value: activeBank.bank_name },
+                                    { label: 'ACCOUNT NUMBER / ගිණුම් අංකය', value: activeBank.account_no || activeBank.bank_account_no },
+                                    { label: 'NAME / නම', value: activeBank.account_name || activeBank.bank_account_name },
+                                    { label: 'BRANCH / ශාඛාව', value: activeBank.branch || activeBank.bank_branch },
                                 ].filter(item => item.value).map((item, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '0.85rem 1.25rem', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
-                                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', opacity: 0.8 }}>{item.label}</span>
-                                        <span style={{ fontWeight: 900, color: '#14532d', fontSize: '1.05rem', fontFamily: 'monospace', letterSpacing: '0.5px' }}>{item.value}</span>
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '1rem 1.5rem', borderRadius: '18px', border: '1px solid #bbf7d0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', opacity: 0.8, letterSpacing: '0.02em' }}>{item.label}</span>
+                                        <span style={{ fontWeight: 900, color: '#14532d', fontSize: '1.2rem', fontFamily: 'Outfit, sans-serif' }}>{item.value}</span>
                                     </div>
                                 ))}
                             </div>
-                            <p style={{ margin: '1.25rem 0 0', fontSize: '0.8rem', color: '#16a34a', fontWeight: 700, textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                                💡 <span style={{ opacity: 0.9 }}>ඉහත ගිණුමට මුදල් transfer කර, රිසිට් පත පහතින් upload කරන්න</span>
-                            </p>
                         </div>
                     );
                 })()}
 
                 <form onSubmit={handleUploadSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Verify NIC Number</label>
-                        <input placeholder="200414402846" value={nicNumber} onChange={e => setNicNumber(e.target.value)} style={{ width: '100%', padding: '1.25rem', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }} />
-                    </div>
-
-                    <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Upload Receipt Image</label>
-                        <div onClick={() => fileInputRef.current.click()} style={{ border: '3px dashed #0ea5e9', background: '#f8fafc', padding: '2.5rem', borderRadius: '20px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
-                            <UploadCloud size={40} color="#0ea5e9" style={{ marginBottom: '1rem', opacity: 0.7 }} />
-                            <p style={{ margin: 0, fontWeight: 800, color: '#0ea5e9', fontSize: '1rem' }}>{selectedFile ? selectedFile.name : 'Click to Upload Slip Image'}</p>
-                            <p style={{ margin: '0.5rem 0 0', fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>0 Files With Changes</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1.5fr', gap: '1.5rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>NIC Number</label>
+                            <input placeholder="NIC..." value={nicNumber} onChange={e => setNicNumber(e.target.value)} style={{ width: '100%', padding: '1.1rem', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }} />
+                        </div>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Payment Receipt</label>
+                            <div onClick={() => fileInputRef.current.click()} style={{ border: '2.5px dashed #0ea5e9', background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                                <UploadCloud size={24} color="#0ea5e9" />
+                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                    <div style={{ fontWeight: 800, color: '#0ea5e9', fontSize: '0.95rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedFile ? selectedFile.name : 'Select Receipt Slip'}</div>
+                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>JPEG, PNG allowed</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    {uploadErrorMsg && <p style={{ color: '#ef4444', fontSize: '0.85rem', fontWeight: 700, margin: 0 }}>❌ {uploadErrorMsg}</p>}
+                    {uploadErrorMsg && <p style={{ color: '#ef4444', fontSize: '0.9rem', fontWeight: 800, margin: 0, textAlign: 'center' }}>❌ {uploadErrorMsg}</p>}
                     <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={e => setSelectedFile(e.target.files[0])} />
                     
-                    <button type="submit" disabled={isUploading} style={{ background: 'var(--color-primary-gradient)', color: 'white', padding: '1.25rem', borderRadius: '16px', border: 'none', fontWeight: 800, fontSize: '1.1rem', cursor: 'pointer', boxShadow: '0 10px 20px rgba(14, 165, 233, 0.3)' }}>
-                        {isUploading ? 'Registering...' : 'Submit Payment Slip'}
+                    <button type="submit" disabled={isUploading} style={{ background: 'var(--color-primary-gradient)', color: 'white', padding: '1.25rem', borderRadius: '20px', border: 'none', fontWeight: 900, fontSize: '1.2rem', cursor: 'pointer', boxShadow: '0 12px 24px rgba(14, 165, 233, 0.4)', transition: 'transform 0.2s' }} onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'} onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}>
+                        {isUploading ? 'Registering Your Payment...' : 'Submit Payment Slip'}
                     </button>
+                    <p style={{ textAlign: 'center', fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>We will verify your payment within 24 hours.</p>
                 </form>
             </div>
           </div>
