@@ -1410,7 +1410,7 @@ export default function Dashboard() {
                     <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 640 ? '1fr' : '1fr 1.5fr', gap: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>NIC Number</label>
-                            <input placeholder="NIC..." value={nicNumber} onChange={e => setNicNumber(e.target.value)} style={{ width: '100%', padding: '1.1rem', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }} />
+                            <input placeholder="NIC Not Linked..." value={nicNumber} disabled style={{ width: '100%', padding: '1.1rem', background: '#e2e8f0', border: '2px dashed #cbd5e1', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 800, color: '#64748b', cursor: 'not-allowed' }} />
                         </div>
                         <div>
                             <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Payment Receipt</label>
