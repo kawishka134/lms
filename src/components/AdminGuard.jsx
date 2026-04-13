@@ -34,14 +34,14 @@ export default function AdminGuard() {
 
           const { data: instructor } = await supabase
             .from('instructors')
-            .select('id, email, is_blocked, access_expiry_date')
+            .select('id, email, is_blocked, access_expiry_date, commission_status')
             .eq('id', instructorId)
             .maybeSingle();
 
           if (!instructor) { setStatus('denied'); return; }
           if (instructor.is_blocked) { setStatus('denied'); return; }
           if (instructor.email?.toLowerCase() !== userEmail) { setStatus('denied'); return; }
-          if (instructor.access_expiry_date && new Date(instructor.access_expiry_date) < new Date()) {
+          if (instructor.commission_status === 'Pending' || (instructor.access_expiry_date && new Date(instructor.access_expiry_date) < new Date())) {
             setStatus('denied');
             return;
           }

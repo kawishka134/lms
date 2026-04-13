@@ -310,16 +310,17 @@ export default function ManageInstructors() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
           {instructors.map(instructor => {
               const expired = isExpired(instructor.access_expiry_date);
+              const isLocked = expired || instructor.commission_status === 'Pending';
               
               return (
-              <div key={instructor.id} className="card" style={{ position: 'relative', overflow: 'hidden', border: expired ? '2px solid var(--color-danger)' : '1px solid var(--color-surface-border)' }}>
-                 {expired && (
+              <div key={instructor.id} className="card" style={{ position: 'relative', overflow: 'hidden', border: isLocked ? '2px solid var(--color-danger)' : '1px solid var(--color-surface-border)' }}>
+                 {isLocked && (
                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: 'var(--color-danger)', color: 'white', padding: '0.25rem', textAlign: 'center', fontSize: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', zIndex: 10 }}>
-                         <Lock size={12} /> ACCOUNT LOCKED (EXPIRED)
+                         <Lock size={12} /> ACCOUNT LOCKED ({instructor.commission_status === 'Pending' ? 'COMMISSION PENDING' : 'EXPIRED'})
                      </div>
                  )}
               
-                 <div style={{ width: '100%', height: '220px', borderRadius: '12px', overflow: 'hidden', marginBottom: '1rem', backgroundColor: '#f1f5f9', opacity: expired ? 0.6 : 1, marginTop: expired ? '1rem' : 0 }}>
+                 <div style={{ width: '100%', height: '220px', borderRadius: '12px', overflow: 'hidden', marginBottom: '1rem', backgroundColor: '#f1f5f9', opacity: isLocked ? 0.6 : 1, marginTop: isLocked ? '1rem' : 0 }}>
                      {instructor.photo_url ? (
                        <img src={instructor.photo_url} alt={instructor.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                      ) : (

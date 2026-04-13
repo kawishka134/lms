@@ -37,7 +37,7 @@ export default function Login() {
       
       const { data: instructorCheck } = await supabase
           .from('instructors')
-          .select('id, name, email, access_expiry_date, is_blocked')
+          .select('id, name, email, access_expiry_date, is_blocked, commission_status')
           .ilike('email', userEmail)
           .maybeSingle();
 
@@ -46,7 +46,7 @@ export default function Login() {
               await supabase.auth.signOut();
               throw new Error("⚠️ Your account has been temporarily blocked by the administrator.");
           }
-          if (instructorCheck.access_expiry_date && new Date(instructorCheck.access_expiry_date) < new Date()) {
+          if (instructorCheck.commission_status === 'Pending' || (instructorCheck.access_expiry_date && new Date(instructorCheck.access_expiry_date) < new Date())) {
               // Check for ANY pending payment slip
               const { data: existingPending } = await supabase
                   .from('instructor_payments')
