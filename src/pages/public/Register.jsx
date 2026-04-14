@@ -35,6 +35,30 @@ export default function Register() {
     email: true
   });
 
+  const [availableSubjects, setAvailableSubjects] = useState([]);
+  const [allCourses, setAllCourses] = useState([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // Fetch all courses to get available subjects and their grades
+      const { data: coursesData } = await supabase
+        .from('courses')
+        .select('subject, year, instructors(name)');
+      
+      if (coursesData) {
+        setAllCourses(coursesData);
+        const uniqueSubjects = [...new Set(coursesData.map(c => c.subject))];
+        setAvailableSubjects(uniqueSubjects);
+      }
+    };
+    fetchData();
+  }, []);
+
+  // Filter subjects based on selected grade
+  const displayedSubjects = formData.grade 
+    ? [...new Set(allCourses.filter(c => c.year.toString() === formData.grade.toString()).map(c => c.subject))]
+    : availableSubjects;
+
   const srilankaDistricts = [
     'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya', 
     'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar', 
@@ -312,10 +336,10 @@ export default function Register() {
             </div>
 
             <div>
-                <label className="input-label">Year (වසර)</label>
+                <label className="input-label">Exam Year (විභාග වසර)</label>
                 <select name="year" className="input-field" required onChange={handleChange}>
-                    <option value="">Select Year</option>
-                    {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                    <option value="">Select Exam Year</option>
+                    {[2024, 2025, 2026, 2027, 2028].map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
             </div>
 
@@ -328,29 +352,49 @@ export default function Register() {
             </div>
 
             <div style={{ gridColumn: '1 / -1' }}>
-                <label className="input-label">Select All Your Subjects</label>
+                <label className="input-label">Select Your Subjects ({formData.grade ? `Grade ${formData.grade}` : 'All Grades'})</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.5rem' }}>
-                    {['O/L Commerce', 'A/L Economics', 'A/L Business Studies'].map(sub => (
-                        <button 
-                            key={sub} 
-                            type="button" 
-                            onClick={() => toggleSubject(sub)}
-                            className="glass-premium"
-                            style={{ 
-                                padding: '0.75rem 1.5rem', 
-                                borderRadius: '12px', 
-                                border: formData.subject.includes(sub) ? '2px solid var(--color-primary)' : '1px solid var(--color-surface-border)',
-                                backgroundColor: formData.subject.includes(sub) ? 'rgba(225, 29, 72, 0.05)' : 'white',
-                                color: formData.subject.includes(sub) ? 'var(--color-primary)' : 'var(--color-text)',
-                                fontWeight: 800,
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                fontSize: '0.9rem'
-                            }}
-                        >
-                            {sub}
-                        </button>
-                    ))}
+                    {displayedSubjects.length > 0 ? (
+                        displayedSubjects.map(sub => {
+                            // Find instructors who teach this subject in this grade
+                            const subjectTeachers = [...new Set(allCourses
+                                .filter(c => c.subject === sub && (!formData.grade || c.year.toString() === formData.grade.toString()))
+                                .map(c => c.instructors?.name)
+                                .filter(Boolean))];
+
+                            return (
+                                <div key={sub} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                    <button 
+                                        type="button" 
+                                        onClick={() => toggleSubject(sub)}
+                                        className="glass-premium"
+                                        style={{ 
+                                            padding: '0.75rem 1.5rem', 
+                                            borderRadius: '12px', 
+                                            border: formData.subject.includes(sub) ? '2px solid var(--color-primary)' : '1px solid var(--color-surface-border)',
+                                            backgroundColor: formData.subject.includes(sub) ? 'rgba(225, 29, 72, 0.05)' : 'white',
+                                            color: formData.subject.includes(sub) ? 'var(--color-primary)' : 'var(--color-text)',
+                                            fontWeight: 800,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            fontSize: '0.9rem'
+                                        }}
+                                    >
+                                        {sub}
+                                    </button>
+                                    {subjectTeachers.length > 0 && (
+                                        <span style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', textAlign: 'center', fontWeight: 600 }}>
+                                            {subjectTeachers.join(', ')}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })
+                    ) : (
+                        <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>
+                            {formData.grade ? `No subjects found for Grade ${formData.grade} yet.` : 'Loading subjects...'}
+                        </p>
+                    )}
                 </div>
             </div>
 
