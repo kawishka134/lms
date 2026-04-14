@@ -40,6 +40,10 @@ export default function ManageFreeClass() {
       setSelectedGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);
   };
 
+  const toggleSubject = (subject) => {
+      setSelectedSubjects(prev => prev.includes(subject) ? prev.filter(s => s !== subject) : [...prev, subject]);
+  };
+
   const handleSubmit = async (e) => {
       e.preventDefault();
       setIsPublishing(true);
