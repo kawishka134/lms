@@ -6,17 +6,53 @@ import SecurePlayer from '../../components/SecurePlayer';
 
 export default function Catalog() {
   const [courses, setCourses] = useState([]);
+  const [instructors, setInstructors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedVideoId, setSelectedVideoId] = useState(null);
+  
+  // Filter States
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedInstructorId, setSelectedInstructorId] = useState('');
 
   useEffect(() => {
-    const fetchCourses = async () => {
-      const { data } = await supabase.from('courses').select('*').order('created_at', { ascending: false });
-      if (data) setCourses(data);
-      setLoading(false);
-    };
-    fetchCourses();
+    (async () => {
+      try {
+        const [coursesRes, instructorsRes] = await Promise.all([
+          supabase.from('courses').select('*').order('created_at', { ascending: false }),
+          supabase.from('instructors').select('*').eq('is_active', true).order('name')
+        ]);
+
+        if (instructorsRes.data) setInstructors(instructorsRes.data);
+        
+        if (coursesRes.data && instructorsRes.data) {
+          // Map instructor names to courses for display/filtering
+          const mappedCourses = coursesRes.data.map(c => {
+             const inst = instructorsRes.data.find(i => i.id === c.instructor_id);
+             return { ...c, instructor_name: inst ? inst.name : 'Unknown' };
+          });
+          setCourses(mappedCourses);
+        } else if (coursesRes.data) {
+          setCourses(coursesRes.data);
+        }
+      } catch (err) {
+        console.error("Catalog fetch error:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
+
+  // Derived Filter Options
+  const years = [...new Set(courses.map(c => c.year))].filter(Boolean).sort();
+  const subjects = [...new Set(courses.map(c => c.subject))].filter(Boolean).sort();
+
+  // Filtered List
+  const filteredCourses = courses.filter(c => {
+    return (selectedYear === '' || c.year === selectedYear) &&
+           (selectedSubject === '' || c.subject === selectedSubject) &&
+           (selectedInstructorId === '' || c.instructor_id === selectedInstructorId);
+  });
 
   const extractYouTubeId = (url) => {
     if (!url) return null;
@@ -39,23 +75,39 @@ export default function Catalog() {
       <h1 style={{ fontSize: '2rem', marginBottom: '1.5rem' }}>Course Catalog</h1>
       
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
-        <select className="input-field" style={{ maxWidth: '200px', marginBottom: 0 }}>
+        <select 
+          className="input-field" 
+          style={{ maxWidth: '200px', marginBottom: 0 }}
+          value={selectedYear}
+          onChange={(e) => setSelectedYear(e.target.value)}
+        >
           <option value="">All Years</option>
-          <option value="2024">2024</option>
-          <option value="2025">2025</option>
-          <option value="O/L">O/L</option>
+          {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        <select className="input-field" style={{ maxWidth: '200px', marginBottom: 0 }}>
+        <select 
+          className="input-field" 
+          style={{ maxWidth: '200px', marginBottom: 0 }}
+          value={selectedSubject}
+          onChange={(e) => setSelectedSubject(e.target.value)}
+        >
           <option value="">All Subjects</option>
-          <option value="Econ">Economics</option>
-          <option value="BS">Business Studies</option>
+          {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select 
+          className="input-field" 
+          style={{ maxWidth: '200px', marginBottom: 0 }}
+          value={selectedInstructorId}
+          onChange={(e) => setSelectedInstructorId(e.target.value)}
+        >
+          <option value="">All Instructors</option>
+          {instructors.map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
         </select>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2rem' }}>
         {loading ? (
            [1,2,3,4,5,6].map(i => <div key={i} className="card shimmer" style={{ height: '350px' }}></div>)
-        ) : courses.map(c => (
+        ) : filteredCourses.map(c => (
           <div key={c.id} className="card" style={{ display: 'flex', flexDirection: 'column', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
             <div style={{ height: '180px', backgroundColor: 'var(--color-surface-hover)', borderRadius: 'var(--radius-md) var(--radius-md) 0 0', overflow: 'hidden', borderBottom: '1px solid var(--color-surface-border)' }}>
               {c.thumbnail_url ? (
