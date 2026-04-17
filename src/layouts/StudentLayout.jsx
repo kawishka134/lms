@@ -157,13 +157,31 @@ export default function StudentLayout() {
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="main-content" style={{ marginTop: isHomePage ? 0 : '70px' }}>
-        <Outlet />
-      </main>
+       {/* Main Content */}
+       <main className="main-content" style={{ marginTop: isHomePage ? 0 : '70px', minHeight: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column' }}>
+         <div style={{ flex: 1 }}>
+            <Outlet />
+         </div>
+         
+         <footer style={{ 
+            padding: '3rem 0', 
+            background: isHomePage ? '#030712' : 'var(--color-surface)', 
+            borderTop: isHomePage ? '1px solid rgba(255,255,255,0.06)' : '1px solid var(--color-surface-border)', 
+            textAlign: 'center' 
+         }}>
+           <div className="container">
+              <p style={{ color: isHomePage ? 'rgba(255,255,255,0.4)' : 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
+                © {new Date().getFullYear()} <span style={{ color: isHomePage ? '#fff' : 'var(--color-text)', fontWeight: 700 }}>Nexus Online</span> · Sri Lanka
+              </p>
+              <p style={{ color: isHomePage ? 'rgba(255,255,255,0.25)' : 'var(--color-text-muted)', fontSize: '0.75rem', opacity: isHomePage ? 1 : 0.6, fontWeight: 600, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+                Developed & Powered by <span style={{ color: 'var(--color-primary)', fontWeight: 800 }}>Radical Commerce</span>
+              </p>
+           </div>
+         </footer>
+       </main>
 
-       {/* Floating AI Support Widget */}
-       <SupportAI />
+        {/* Floating AI Support Widget */}
+        <SupportAI />
     </div>
   );
 }

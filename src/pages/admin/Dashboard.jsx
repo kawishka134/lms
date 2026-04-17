@@ -106,7 +106,7 @@ export default function AdminDashboard() {
         const { data, error } = await supabase
           .from('profiles')
           .select('*')
-          .or(`full_name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,district.ilike.%${searchQuery}%,town.ilike.%${searchQuery}%`)
+          .or(`full_name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,district.ilike.%${searchQuery}%,province.ilike.%${searchQuery}%,town.ilike.%${searchQuery}%`)
           .eq('role', 'student')
           .limit(10);
 

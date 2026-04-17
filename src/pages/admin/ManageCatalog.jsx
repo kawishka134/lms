@@ -25,7 +25,9 @@ export default function ManageCatalog() {
         bank_name: '',
         bank_account_no: '',
         bank_account_name: '',
-        bank_branch: ''
+        bank_branch: '',
+        is_free_trial: false, // Added
+        trial_duration: '' // Added
     });
 
     const adminRole = localStorage.getItem('admin_role'); 
@@ -36,6 +38,7 @@ export default function ManageCatalog() {
     const [uploading, setUploading] = useState(false);
     const [isUploadingVideo, setIsUploadingVideo] = useState(false);
     const [isOtherSubject, setIsOtherSubject] = useState(false);
+    const [isOtherBatch, setIsOtherBatch] = useState(false); // Added
     const fileInputRef = useRef(null);
     const videoInputRef = useRef(null);
 
@@ -89,7 +92,8 @@ export default function ManageCatalog() {
         setTimeout(() => {
             setActiveTab('list');
             setEditingId(null);
-            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '', promo_video_url: '', free_lesson_url: '', bank_name: '', bank_account_no: '', bank_account_name: '', bank_branch: '' });
+            setIsOtherBatch(false);
+            setFormData({ title: '', description: '', price: '', year: '', batch: '', subject: '', class_type: 'Theory', thumbnail_url: '', instructor_id: '', promo_video_url: '', free_lesson_url: '', bank_name: '', bank_account_no: '', bank_account_name: '', bank_branch: '', is_free_trial: false, trial_duration: '' });
             fetchCoursesAndInstructors();
         }, 1500);
         setIsSaving(false);
@@ -172,8 +176,11 @@ export default function ManageCatalog() {
             bank_name: bankName,
             bank_account_no: bankAccountNo,
             bank_account_name: bankAccountName,
-            bank_branch: bankBranch
+            bank_branch: bankBranch,
+            is_free_trial: course.is_free_trial || false,
+            trial_duration: course.trial_duration || ''
         });
+        setIsOtherBatch(![2024, 2025, 2026, 2027].includes(parseInt(course.batch)) && course.batch !== '');
         setEditingId(course.id);
         setActiveTab('add');
     };
@@ -208,7 +215,7 @@ export default function ManageCatalog() {
                     <p style={{ color: 'var(--color-text-muted)', marginTop: '0.25rem' }}>Update the courses visible to public visitors.</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={() => { setActiveTab('list'); setEditingId(null); setFormData({title:'', description:'', price:'', year:'', batch:'', subject:'', thumbnail_url:'', promo_video_url:'', free_lesson_url:''}); }} className={`btn ${activeTab === 'list' ? 'btn-primary' : 'btn-outline'}`}>
+                    <button onClick={() => { setActiveTab('list'); setEditingId(null); setIsOtherBatch(false); setFormData({title:'', description:'', price:'', year:'', batch:'', subject:'', thumbnail_url:'', promo_video_url:'', free_lesson_url:'', is_free_trial: false, trial_duration: ''}); }} className={`btn ${activeTab === 'list' ? 'btn-primary' : 'btn-outline'}`}>
                         <BookOpen size={18} /> View Catalog
                     </button>
                     <button onClick={() => setActiveTab('add')} className={`btn ${activeTab === 'add' ? 'btn-primary' : 'btn-outline'}`}>
@@ -239,10 +246,12 @@ export default function ManageCatalog() {
                                     <p style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600 }}>By: {course.instructors.name}</p>
                                 )}
                             </div>
-                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
-                                <button onClick={() => handleEdit(course)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem' }}><Edit2 size={16} /> Edit</button>
-                                <button onClick={() => handleDelete(course.id)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}><Trash2 size={16} /> Delete</button>
-                            </div>
+                            {(isSuperAdmin || course.instructor_id === currentInstructorId) && (
+                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
+                                    <button onClick={() => handleEdit(course)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem' }}><Edit2 size={16} /> Edit</button>
+                                    <button onClick={() => handleDelete(course.id)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}><Trash2 size={16} /> Delete</button>
+                                </div>
+                            )}
                         </div>
                     ))}
                     {courses.length === 0 && (
@@ -269,11 +278,35 @@ export default function ManageCatalog() {
                                 </select>
                             </div>
                             <div>
-                                <label className="input-label">Year / Batch</label>
-                                <select className="input-field" value={formData.batch} onChange={e => setFormData({...formData, batch: e.target.value})}>
+                                <label className="input-label">Year / Batch (Intake)</label>
+                                <select 
+                                    className="input-field" 
+                                    value={isOtherBatch ? 'Other' : formData.batch} 
+                                    onChange={e => {
+                                        if (e.target.value === 'Other') {
+                                            setIsOtherBatch(true);
+                                            setFormData({...formData, batch: ''});
+                                        } else {
+                                            setIsOtherBatch(false);
+                                            setFormData({...formData, batch: e.target.value});
+                                        }
+                                    }}
+                                >
                                     <option value="">-- Optional --</option>
                                     {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y} Intake</option>)}
+                                    <option value="Other">+ Add New Intake</option>
                                 </select>
+                                {isOtherBatch && (
+                                    <input 
+                                        type="text" 
+                                        className="input-field" 
+                                        style={{ marginTop: '0.5rem' }} 
+                                        placeholder="Enter intake year (e.g. 2028)..." 
+                                        value={formData.batch} 
+                                        onChange={e => setFormData({...formData, batch: e.target.value})} 
+                                        required 
+                                    />
+                                )}
                             </div>
                             <div>
                                 <label className="input-label">Class Category</label>
@@ -403,6 +436,42 @@ export default function ManageCatalog() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Trial / Free Access Limit */}
+                        <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '2px solid #3b82f6', borderRadius: '16px', padding: '1.5rem', marginBottom: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                                <div style={{ width: '36px', height: '36px', backgroundColor: '#3b82f6', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '1.2rem' }}>🕒</div>
+                                <div>
+                                    <h3 style={{ margin: 0, fontWeight: 900, fontSize: '1rem', color: '#1e3a8a' }}>Trial / Limited Free Access</h3>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600 }}>Offer temporary free access to attract new students.</p>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
+                                    <input type="checkbox" checked={formData.is_free_trial} onChange={e => setFormData({...formData, is_free_trial: e.target.checked})} style={{ width: '18px', height: '18px' }} />
+                                    Enable Trial / Free Period
+                                </label>
+                                {formData.is_free_trial && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                                        <input 
+                                            type="number" 
+                                            className="input-field" 
+                                            style={{ margin: 0, backgroundColor: 'white', maxWidth: '120px' }} 
+                                            placeholder="Days" 
+                                            value={formData.trial_duration} 
+                                            onChange={e => setFormData({...formData, trial_duration: e.target.value})} 
+                                            required 
+                                        />
+                                        <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>Days of Access</span>
+                                    </div>
+                                )}
+                            </div>
+                            {formData.is_free_trial && (
+                                <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#1e3a8a', opacity: 0.8, fontStyle: 'italic' }}>
+                                    💡 Students will lose access automatically after {formData.trial_duration || 'X'} days from enrollment.
+                                </p>
+                            )}
                         </div>
 
                         {/* Bank Payment Details */}

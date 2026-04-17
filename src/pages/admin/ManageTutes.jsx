@@ -22,6 +22,9 @@ export default function ManageTutes() {
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [selectedGiftTute, setSelectedGiftTute] = useState(null);
   const { showToast } = useToast();
+  const adminRole = localStorage.getItem('admin_role');
+  const isSuperAdmin = adminRole === 'super_admin';
+  const currentInstructorId = localStorage.getItem('instructor_id');
 
   const [availGrades, setAvailGrades] = useState([]);
   const [availBatches, setAvailBatches] = useState([]);
@@ -115,7 +118,7 @@ export default function ManageTutes() {
             grade: newTute.grade,
             subject: newTute.subject,
             batch: newTute.batch,
-            instructor_id: newTute.instructor_id || null,
+            instructor_id: isSuperAdmin ? (newTute.instructor_id || null) : currentInstructorId,
             target_audience: `${newTute.grade} ${newTute.batch} ${newTute.subject}`
         };
 
@@ -215,8 +218,12 @@ export default function ManageTutes() {
                             <span className={`badge ${tute.is_free ? 'badge-success' : 'badge-primary'}`} style={{ fontSize: '0.65rem' }}>{tute.is_free ? 'FREE' : `Rs. ${tute.price}`}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => openEdit(tute)} style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }}><Plus size={18} /></button>
-                            <button onClick={() => handleDelete(tute.id)} style={{ color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={18} /></button>
+                            {(isSuperAdmin || tute.instructor_id === currentInstructorId) && (
+                                <>
+                                    <button onClick={() => openEdit(tute)} style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer' }} title="Edit Tute"><Plus size={18} /></button>
+                                    <button onClick={() => handleDelete(tute.id)} style={{ color: 'var(--color-danger)', background: 'none', border: 'none', cursor: 'pointer' }} title="Delete Tute"><Trash2 size={18} /></button>
+                                </>
+                            )}
                         </div>
                     </div>
                     <h3 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: '0.25rem' }}>{tute.title}</h3>
@@ -227,7 +234,7 @@ export default function ManageTutes() {
                         <div style={{ flex: 1, background: 'var(--color-bg)', padding: '0.75rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 700, opacity: 0.7 }}>
                             <FileText size={14} /> PDF Material
                         </div>
-                        {!tute.is_free && (
+                        {(!tute.is_free && (isSuperAdmin || tute.instructor_id === currentInstructorId)) && (
                             <button 
                                 onClick={() => { setSelectedGiftTute(tute); setShowGiftModal(true); }}
                                 className="btn btn-outline" 
@@ -343,18 +350,20 @@ export default function ManageTutes() {
                           </div>
                       </div>
 
-                      <div>
-                          <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>ASSIGNED INSTRUCTOR (SIR)</label>
-                          <select 
-                            required 
-                            value={newTute.instructor_id} 
-                            onChange={e => setNewTute({...newTute, instructor_id: e.target.value})} 
-                            className="input-field"
-                          >
-                              <option value="">-- Select Instructor --</option>
-                              {instructors.map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
-                          </select>
-                      </div>
+                      {isSuperAdmin && (
+                          <div>
+                              <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>ASSIGNED INSTRUCTOR (SIR)</label>
+                              <select 
+                                required 
+                                value={newTute.instructor_id} 
+                                onChange={e => setNewTute({...newTute, instructor_id: e.target.value})} 
+                                className="input-field"
+                              >
+                                  <option value="">-- Select Instructor --</option>
+                                  {instructors.map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
+                              </select>
+                          </div>
+                      )}
 
                       <div>
                           <label style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', marginBottom: '5px', display: 'block' }}>TUTE TITLE</label>

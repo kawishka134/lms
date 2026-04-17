@@ -25,6 +25,7 @@ export default function Register() {
     year: '',
     district: '',
     town: '',
+    province: '', // Added
     address: '',
     password: ''
   });
@@ -58,6 +59,11 @@ export default function Register() {
   const displayedSubjects = formData.grade 
     ? [...new Set(allCourses.filter(c => c.year.toString() === formData.grade.toString()).map(c => c.subject))]
     : availableSubjects;
+
+  const srilankaProvinces = [
+    'Central', 'Eastern', 'North Central', 'Northern', 'North Western', 
+    'Sabaragamuwa', 'Southern', 'Uva', 'Western'
+  ];
 
   const srilankaDistricts = [
     'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya', 
@@ -245,6 +251,7 @@ export default function Register() {
               year: formData.year,
               subject: formData.subject.join(', '),
               district: formData.district,
+              province: formData.province,
               town: formData.town,
               address: formData.address,
               role: formData.email === 'kawishkaperera134@gmail.com' ? 'admin' : 'student'
@@ -404,6 +411,14 @@ export default function Register() {
             <div style={{ gridColumn: '1 / -1', borderBottom: '1px solid var(--color-surface-border)', paddingBottom: '0.5rem', marginBottom: '0.5rem', marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <MapPin size={18} color="var(--color-primary)" />
                 <span style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)' }}>Delivery Details</span>
+            </div>
+
+            <div>
+                <label className="input-label">Province</label>
+                <select name="province" className="input-field" required onChange={handleChange} value={formData.province}>
+                    <option value="">Select Province</option>
+                    {srilankaProvinces.map(p => <option key={p} value={p}>{p} Province</option>)}
+                </select>
             </div>
 
             <div>

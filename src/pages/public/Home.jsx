@@ -355,9 +355,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer style={{ padding: '3rem 0', background: '#030712', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
-        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>© {new Date().getFullYear()} Nexus Online · Sri Lanka</p>
-      </footer>
+
 
       <style>{`
         .hm-container { max-width:1200px; margin:0 auto; padding:0 2rem; }

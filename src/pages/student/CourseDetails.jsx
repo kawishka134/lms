@@ -109,6 +109,48 @@ export default function CourseDetails() {
     }
   };
 
+  const handleFreeTrial = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+        showToast('Please login first to start your trial.', 'error');
+        navigate('/login');
+        return;
+    }
+
+    setIsUploading(true);
+    try {
+        const trialDays = course.trial_duration || 7;
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + parseInt(trialDays));
+
+        const { error: upsertError } = await supabase.from('enrollments').upsert({
+            student_id: session.user.id,
+            course_id: id,
+            status: 'approved',
+            expires_at: expiryDate.toISOString(),
+            updated_at: new Date().toISOString(),
+            payment_method: 'free_trial'
+        }, { onConflict: 'student_id, course_id' });
+
+        if (upsertError) throw upsertError;
+
+        setAccessStatus('approved');
+        showToast(`Trial started! You have full access for ${trialDays} days.`, 'success');
+        
+        // SMS Notification
+        try {
+            if (studentProfile?.phone) {
+                await sendSMS(studentProfile.phone, `Nexus: Your ${trialDays}-day free trial for ${course.title} has started! Enjoy learning.`);
+            }
+        } catch(e) {}
+
+    } catch (err) {
+        showToast(err.message, 'error');
+    } finally {
+        setIsUploading(false);
+    }
+  };
+
   const extractYouTubeId = (url) => {
     if (!url) return null;
     const match = url.match(/[?&]v=([^&]+)/) || 
@@ -234,6 +276,21 @@ export default function CourseDetails() {
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                            {course.is_free_trial && (
+                                <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border: '2px solid #3b82f6', borderRadius: '28px', padding: '2rem', textAlign: 'center', boxShadow: '0 10px 25px rgba(59, 130, 246, 0.15)' }}>
+                                    <h3 style={{ margin: '0 0 0.5rem', fontWeight: 900, fontSize: '1.4rem', color: '#1e3a8a' }}>New Student Trial</h3>
+                                    <p style={{ margin: '0 0 1.5rem', fontSize: '1rem', color: '#1e40af', fontWeight: 600 }}>Get full access for <span style={{ color: '#2563eb', fontWeight: 900 }}>{course.trial_duration} days</span> for FREE!</p>
+                                    <button 
+                                        onClick={handleFreeTrial}
+                                        disabled={isUploading}
+                                        className="btn btn-primary" 
+                                        style={{ width: '100%', height: '54px', background: '#3b82f6', color: 'white', borderRadius: '16px', fontSize: '1.1rem', fontWeight: 800, border: 'none' }}
+                                    >
+                                        <Sparkles size={20} /> {isUploading ? 'Starting Trial...' : 'Start Free Trial Now'}
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Sinhala Instruction Notice */}
                             <div style={{ background: '#f0f9ff', padding: '2.25rem', borderRadius: '28px', borderLeft: '10px solid #0ea5e9', boxShadow: '0 15px 35px rgba(14, 165, 233, 0.08)' }}>
                                 <p style={{ margin: 0, fontWeight: 800, color: '#0369a1', lineHeight: '1.9', fontSize: '1.05rem' }}>

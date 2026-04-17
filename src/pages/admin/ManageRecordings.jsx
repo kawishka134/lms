@@ -11,6 +11,9 @@ export default function ManageRecordings() {
   const [recordings, setRecordings] = useState([]);
   const { showToast } = useToast();
   const [requests, setRequests] = useState([]);
+  const adminRole = localStorage.getItem('admin_role');
+  const isSuperAdmin = adminRole === 'super_admin';
+  const currentInstructorId = localStorage.getItem('instructor_id');
 
   const [formData, setFormData] = useState({
       title: '',
@@ -335,14 +338,16 @@ export default function ManageRecordings() {
                                      <span style={{ opacity: 0.6 }}>Added: {new Date(block.created_at).toLocaleDateString()}</span>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '0.75rem' }}>
-                                <button onClick={() => openEdit(block)} className="btn btn-outline" style={{ color: 'var(--color-primary)' }}>
-                                    Edit
-                                </button>
-                                <button onClick={() => handleDelete(block.id)} className="btn btn-outline" style={{ color: 'var(--color-danger)' }}>
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
+                            {(isSuperAdmin || block.instructor_id === currentInstructorId) && (
+                                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                                    <button onClick={() => openEdit(block)} className="btn btn-outline" style={{ color: 'var(--color-primary)' }}>
+                                        Edit
+                                    </button>
+                                    <button onClick={() => handleDelete(block.id)} className="btn btn-outline" style={{ color: 'var(--color-danger)' }}>
+                                        <Trash2 size={18} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     ))}
                </div>
