@@ -262,18 +262,18 @@ export default function Home() {
           </p>
 
           <p className="hm-fade-3" style={{
-            fontSize: 'clamp(1rem,2vw,1.4rem)', color: 'rgba(255,255,255,0.65)',
-            maxWidth: '600px', lineHeight: 1.7, marginBottom: '3rem'
+            fontSize: 'clamp(1rem,2vw,1.4rem)', color: 'rgba(255,255,255,0.85)',
+            maxWidth: '600px', lineHeight: 1.7, marginBottom: '3rem', fontWeight: 500
           }}>
-            "{settings?.motto || 'Transforming theoretical knowledge into real-world practical mastery.'}"
+            "{settings?.motto || 'Nothing is impossible'}"
           </p>
 
           <div className="hm-fade-4 hero-btns">
             <Link to="/register" className="hm-btn-primary">
               ලියාපදිංචි වන්න <ArrowRight size={20} />
             </Link>
-            <Link to="/courses" className="hm-btn-ghost">
-              <Play size={18} /> Explore Courses
+            <Link to="/courses" className="hm-btn-ghost" style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.4)' }}>
+              <Play size={18} color="#38bdf8" fill="#38bdf822" /> Explore Courses
             </Link>
           </div>
         </div>
@@ -471,6 +471,33 @@ export default function Home() {
         .hm-container { max-width:1200px; margin:0 auto; padding:0 2rem; }
         .sr          { opacity:0; transform:translateY(36px); transition:opacity .9s cubic-bezier(.33,1,.68,1), transform .9s cubic-bezier(.33,1,.68,1); transition-delay:var(--delay,0s); }
         .sr-visible  { opacity:1 !important; transform:translate(0,0) !important; }
+        
+        /* ── Scroll hint (mouse-wheel) ── */
+        .hm-scroll-hint {
+          position:absolute; bottom:3rem; left:50%; transform:translateX(-50%);
+          z-index:20; animation:hm-hintBounce 2s ease-in-out infinite;
+        }
+        .hm-scroll-wheel {
+          width:28px; height:46px; border:2px solid rgba(255,255,255,0.5);
+          border-radius:16px; display:flex; justify-content:center; padding-top:10px;
+          background: rgba(0,0,0,0.2);
+          backdrop-filter: blur(4px);
+        }
+        .hm-scroll-dot {
+          width:4px; height:8px; background:#fff;
+          border-radius:2px; animation:hm-dotDrop 1.5s ease-in-out infinite;
+          box-shadow: 0 0 10px #38bdf8; opacity: 0.8;
+        }
+        @keyframes hm-hintBounce {
+          0%,100% { transform:translateX(-50%) translateY(0); }
+          50%     { transform:translateX(-50%) translateY(12px); }
+        }
+        @keyframes hm-dotDrop {
+          0%   { opacity:0; transform:translateY(-4px); }
+          30%  { opacity:0.8; transform:translateY(4px); }
+          100% { opacity:0; transform:translateY(16px); }
+        }
+
         .hm-radical-text { background: linear-gradient(120deg, #38bdf8, #e0f2fe, #7dd3fc, #38bdf8); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: hm-radicalShimmer 4s ease infinite; filter: drop-shadow(0 4px 20px rgba(56,189,248,0.3)); }
         @keyframes hm-radicalShimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         .hm-hero-img { animation: hm-heroZoom 25s ease-in-out infinite alternate; transform-origin: center center; }
