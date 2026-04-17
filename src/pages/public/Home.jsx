@@ -1,111 +1,8 @@
 import { ArrowRight, BookOpen, CheckCircle, Star, Users, Trophy, Zap, Play, X, Clock, Lock, PlayCircle, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '../../lib/supabase';
-
-/* ─── Secure Player Component (Replicated from Dashboard) ────────────────── */
-const SecurePlayer = ({ videoId }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isReady, setIsReady] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  
-  const containerRef = useRef(null);
-  const playerRef = useRef(null);
-  const playerDivId = `yt-player-${videoId}`;
-
-  useEffect(() => {
-    if (!window.YT) {
-      const tag = document.createElement('script');
-      tag.src = "https://www.youtube.com/iframe_api";
-      const firstScriptTag = document.getElementsByTagName('script')[0];
-      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-    }
-
-    let checkInterval = setInterval(() => {
-      if (window.YT && window.YT.Player) {
-        clearInterval(checkInterval);
-        playerRef.current = new window.YT.Player(playerDivId, {
-          height: '100%', width: '100%', videoId: videoId,
-          host: 'https://www.youtube-nocookie.com',
-          playerVars: {
-            autoplay: 1, controls: 0, modestbranding: 1, rel: 0, showinfo: 0,
-            iv_load_policy: 3, enablejsapi: 1, origin: window.location.origin, playsinline: 1
-          },
-          events: {
-            onReady: (event) => { setIsReady(true); event.target.playVideo(); },
-            onStateChange: (event) => {
-              if (event.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
-              if (event.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
-              if (event.data === window.YT.PlayerState.ENDED) setIsPlaying(false);
-            }
-          }
-        });
-      }
-    }, 500);
-
-    return () => {
-      clearInterval(checkInterval);
-      if (playerRef.current && playerRef.current.destroy) playerRef.current.destroy();
-    };
-  }, [videoId]);
-
-  const togglePlay = (e) => {
-    e.stopPropagation();
-    if (!playerRef.current || !isReady) return;
-    isPlaying ? playerRef.current.pauseVideo() : playerRef.current.playVideo();
-  };
-
-  const skip = (seconds, e) => {
-    e.stopPropagation();
-    if (!playerRef.current || !isReady) return;
-    const currentTime = playerRef.current.getCurrentTime();
-    playerRef.current.seekTo(currentTime + seconds, true);
-  };
-
-  const toggleFullscreen = (e) => {
-    e.stopPropagation();
-    if (!document.fullscreenElement) {
-        containerRef.current.requestFullscreen().catch(() => {});
-        setIsFullscreen(true);
-    } else {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-    }
-  };
-
-  const [watermarkPos, setWatermarkPos] = useState({ top: '30%', left: '30%' });
-  useEffect(() => {
-    const int = setInterval(() => {
-        setWatermarkPos({ 
-            top: Math.floor(Math.random() * 60 + 10) + '%', 
-            left: Math.floor(Math.random() * 60 + 10) + '%' 
-        });
-    }, 8000);
-    return () => clearInterval(int);
-  }, []);
-
-  return (
-    <div ref={containerRef} style={{ position: 'relative', width: '100%', backgroundColor: 'black', overflow: 'hidden', aspectRatio: '16/9', borderRadius: '12px', userSelect: 'none' }} onContextMenu={(e) => e.preventDefault()}>
-      <div id={playerDivId} style={{ position: 'absolute', inset: 0 }}></div>
-      <div style={{ position: 'absolute', inset: 0, zIndex: 100, background: 'transparent' }} onClick={togglePlay}></div>
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 110, padding: '20px', background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '30px', opacity: isPlaying ? 0 : 1, transition: 'opacity 0.3s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = 1} onMouseLeave={(e) => e.currentTarget.style.opacity = isPlaying ? 0 : 1}>
-        <button onClick={(e) => skip(-10, e)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '45px', height: '45px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Clock size={20} style={{ transform: 'scaleX(-1)' }} /><span style={{ position: 'absolute', fontSize: '8px', fontWeight: 900 }}>10</span>
-        </button>
-        <button onClick={togglePlay} style={{ background: '#0ea5e9', border: 'none', borderRadius: '50%', width: '64px', height: '64px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {isPlaying ? <Lock size={28} /> : <PlayCircle size={32} fill="white" />}
-        </button>
-        <button onClick={(e) => skip(10, e)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '50%', width: '45px', height: '45px', color: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Clock size={20} /><span style={{ position: 'absolute', fontSize: '8px', fontWeight: 900 }}>10</span>
-        </button>
-        <button onClick={toggleFullscreen} style={{ position: 'absolute', right: '20px', background: 'none', border: '1px solid rgba(255,255,255,0.3)', color: 'white', padding: '6px 12px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 900, cursor: 'pointer' }}>{isFullscreen ? 'EXIT' : 'FULLSCREEN'}</button>
-      </div>
-      {!isReady && <div style={{ position: 'absolute', inset: 0, zIndex: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' }}><div style={{ width: '40px', height: '40px', border: '3px solid #0ea5e9', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1.s linear infinite' }}></div></div>}
-      <div style={{ position: 'absolute', top: watermarkPos.top, left: watermarkPos.left, zIndex: 115, pointerEvents: 'none', color: 'rgba(255, 255, 255, 0.2)', fontSize: '0.75rem', fontWeight: 900, textShadow: '2px 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'nowrap', transition: 'all 5s ease-in-out' }}>Nexus Online Protected Content</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-};
+import SecurePlayer from '../../components/SecurePlayer';
 
 /* ─── count-up hook ───────────────────────────────────────────────────────── */
 function useCountUp(target, duration = 2200, start = false) {
@@ -169,28 +66,28 @@ export default function Home() {
   const [selectedVideoId, setSelectedVideoId] = useState(null);
 
   const LOCAL_HERO = '/images/hero_bg.png';
-  const [heroImg, setHeroImg] = useState(null);
+  const [heroImg, setHeroImg] = useState(LOCAL_HERO);
   const [teacherImg, setTeacherImg] = useState(null);
-  const [imgLoaded, setImgLoaded] = useState(false);
   
   useReveal([loading, settings, courses]);
 
   useEffect(() => {
     (async () => {
       try {
-        const { data: s } = await supabase.from('site_settings').select('*').eq('id', 'global').single();
-        const { data: c } = await supabase.from('courses').select('*').order('created_at', { ascending: false }).limit(3);
-        const { data: instData } = await supabase.from('instructors').select('*').eq('is_active', true).order('display_order');
-        
-        if (s) {
-          setSettings(s);
-          if (s.hero_image_url) setHeroImg(s.hero_image_url);
-          if (s.teacher_photo_url) setTeacherImg(s.teacher_photo_url);
-        } else {
-          setHeroImg(LOCAL_HERO);
+        // Parallelized Loading
+        const [settingsRes, coursesRes, instructorsRes] = await Promise.all([
+            supabase.from('site_settings').select('*').eq('id', 'global').single(),
+            supabase.from('courses').select('*').order('created_at', { ascending: false }).limit(3),
+            supabase.from('instructors').select('*').eq('is_active', true).order('display_order')
+        ]);
+
+        if (settingsRes.data) {
+          setSettings(settingsRes.data);
+          if (settingsRes.data.hero_image_url) setHeroImg(settingsRes.data.hero_image_url);
+          setTeacherImg(settingsRes.data.teacher_photo_url);
         }
-        if (c) setCourses(c);
-        if (instData) setInstructors(instData);
+        if (coursesRes.data) setCourses(coursesRes.data);
+        if (instructorsRes.data) setInstructors(instructorsRes.data);
       } catch (err) {
         console.error("Home data error:", err);
       } finally {
@@ -229,11 +126,18 @@ export default function Home() {
       {/* ─── HERO ────────────────────────────────────────────────────── */}
       <section style={{ minHeight: '100vh', position: 'relative', display: 'flex', alignItems: 'center' }}>
 
-        {/* bg image */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 0, background: '#07101f' }}>
-          {heroImg && <img src={heroImg} onError={() => setHeroImg(LOCAL_HERO)} alt=""
-            className="hm-hero-img"
-            style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.4) saturate(1.3)' }} />}
+          {heroImg && (
+            <img 
+              src={heroImg} 
+              onError={() => setHeroImg(LOCAL_HERO)} 
+              alt=""
+              fetchpriority="high"
+              loading="eager"
+              className="hm-hero-img"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.4) saturate(1.3)' }} 
+            />
+          )}
           <div style={{ position: 'absolute', inset: 0,
             background: 'linear-gradient(120deg, rgba(3,7,18,0.8) 40%, rgba(14,165,233,0.06) 100%)' }} />
         </div>
@@ -278,7 +182,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* mouse-wheel hint — minimal, no text */}
         <div className="hm-scroll-hint">
           <div className="hm-scroll-wheel">
             <div className="hm-scroll-dot" />
@@ -312,10 +215,9 @@ export default function Home() {
             {loading ? (
                <div className="hm-skeleton" style={{ width: '320px', height: '480px' }} />
             ) : (
-               /* Founder Card (Slightly larger but still compact) */
                <div className="sr" style={{ width: '320px', background: 'rgba(14, 165, 233, 0.05)', borderRadius: '24px', padding: '1.5rem', border: '1px solid rgba(14, 165, 233, 0.2)', backdropFilter: 'blur(10px)' }}>
                   <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1', borderRadius: '16px', overflow: 'hidden', marginBottom: '1.5rem' }}>
-                     <img src={settings?.teacher_photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Founder" />
+                     <img src={teacherImg} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="Founder" loading="lazy" />
                      <div style={{ position: 'absolute', bottom: '1rem', left: '1rem', right: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', padding: '0.5rem 1rem', borderRadius: '10px', color: '#fff', fontSize: '0.75rem', fontWeight: 800, textAlign: 'center', border: '1px solid rgba(255,255,255,0.1)' }}>INSTITUTE OWNER</div>
                   </div>
                   <h3 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#fff', marginBottom: '0.5rem' }}>{settings?.teacher_name || 'Manjula Prabhath'}</h3>
@@ -327,19 +229,15 @@ export default function Home() {
                </div>
             )}
 
-            {/* Other Experts Row */}
             <div style={{ flex: 1, minWidth: '300px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem' }}>
                 {loading ? (
-                    /* Show 3 skeletons when loading */
-                    [1, 2, 3].map(i => (
-                        <div key={i} className="hm-skeleton" style={{ height: '220px', borderRadius: '20px' }} />
-                    ))
+                    [1, 2, 3].map(i => <div key={i} className="hm-skeleton" style={{ height: '220px', borderRadius: '20px' }} />)
                 ) : (
                     instructors.slice(0, 4).map((inst, index) => (
                         <div key={inst.id} className="sr" style={{ '--delay': `${index * 0.1}s`, background: 'rgba(255,255,255,0.03)', borderRadius: '20px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.05)', textAlign: 'center', transition: 'transform 0.3s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-5px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                             <div style={{ width: '100px', height: '100px', borderRadius: '50%', overflow: 'hidden', margin: '0 auto 1rem', border: '3px solid #0ea5e9' }}>
                                 {inst.photo_url ? (
-                                    <img src={inst.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={inst.name} />
+                                    <img src={inst.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={inst.name} loading="lazy" />
                                 ) : (
                                     <div style={{ width: '100%', height: '100%', background: '#0ea5e922', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <Users size={40} color="#0ea5e9" />
@@ -359,12 +257,6 @@ export default function Home() {
                         </div>
                         <span style={{ color: '#0ea5e9', fontWeight: 900, fontSize: '0.9rem' }}>See All Experts</span>
                     </Link>
-                )}
-
-                {instructors.length <= 4 && instructors.length > 0 && (
-                     <Link to="/experts" className="sr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0ea5e9', fontWeight: 800, gap: '0.5rem', textDecoration: 'none' }}>
-                        View All <ArrowRight size={16} />
-                     </Link>
                 )}
             </div>
           </div>
@@ -428,9 +320,9 @@ export default function Home() {
                 if (yt) return (
                   <iframe 
                     src={`https://www.youtube.com/embed/${yt[1]}?autoplay=1&mute=1&controls=1&rel=0&modestbranding=1`}
-                    title="Intro Video" allow="autoplay; encrypted-media" allowFullScreen />
+                    title="Intro Video" allow="autoplay; encrypted-media" allowFullScreen loading="lazy" />
                 );
-                return <video src={v} autoPlay muted loop playsInline controls />;
+                return <video src={v} autoPlay muted loop playsInline controls loading="lazy" />;
               })()}
             </div>
           </div>
@@ -454,14 +346,8 @@ export default function Home() {
                 ලියාපදිංචි වන්න <ArrowRight size={20} />
             </Link>
             <Link to="/contact" className="hm-btn-ghost" style={{ 
-                minWidth: '220px', 
-                justifyContent: 'center', 
-                border: '1px solid #38bdf866', 
-                color: '#38bdf8',
-                background: 'rgba(56, 189, 248, 0.05)',
-                backdropFilter: 'blur(10px)',
-                fontWeight: 800,
-                borderRadius: '100px'
+                minWidth: '220px', justifyContent: 'center', border: '1px solid #38bdf866', color: '#38bdf8', borderRadius: '100px',
+                background: 'rgba(56, 189, 248, 0.05)', backdropFilter: 'blur(10px)', fontWeight: 800
             }}>
                 සම්බන්ධ වන්න
             </Link>
@@ -469,62 +355,34 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ─── FOOTER ──────────────────────────────────────────────────── */}
       <footer style={{ padding: '3rem 0', background: '#030712', borderTop: '1px solid rgba(255,255,255,0.06)', textAlign: 'center' }}>
-        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-          POWERED BY <span style={{ fontWeight: 'bold' }}>රැඩිකල්</span> COMMERCE
-        </p>
-        <p style={{ color: 'rgba(255,255,255,0.25)', fontSize: '0.85rem' }}>
-          © {new Date().getFullYear()} Nexus Online · Sri Lanka
-        </p>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem' }}>© {new Date().getFullYear()} Nexus Online · Sri Lanka</p>
       </footer>
 
-      {/* ─── ALL SCOPED STYLES ────────────────────────────────────────── */}
       <style>{`
         .hm-container { max-width:1200px; margin:0 auto; padding:0 2rem; }
         .sr          { opacity:0; transform:translateY(36px); transition:opacity .9s cubic-bezier(.33,1,.68,1), transform .9s cubic-bezier(.33,1,.68,1); transition-delay:var(--delay,0s); }
         .sr-visible  { opacity:1 !important; transform:translate(0,0) !important; }
-        
-        /* ── Scroll hint (mouse-wheel) ── */
-        .hm-scroll-hint {
-          position:absolute; bottom:3rem; left:50%; transform:translateX(-50%);
-          z-index:20; animation:hm-hintBounce 2s ease-in-out infinite;
-        }
-        .hm-scroll-wheel {
-          width:28px; height:46px; border:2px solid rgba(255,255,255,0.5);
-          border-radius:16px; display:flex; justify-content:center; padding-top:10px;
-          background: rgba(0,0,0,0.2);
-          backdrop-filter: blur(4px);
-        }
-        .hm-scroll-dot {
-          width:4px; height:8px; background:#fff;
-          border-radius:2px; animation:hm-dotDrop 1.5s ease-in-out infinite;
-          box-shadow: 0 0 10px #38bdf8; opacity: 0.8;
-        }
-        @keyframes hm-hintBounce {
-          0%,100% { transform:translateX(-50%) translateY(0); }
-          50%     { transform:translateX(-50%) translateY(12px); }
-        }
-        @keyframes hm-dotDrop {
-          0%   { opacity:0; transform:translateY(-4px); }
-          30%  { opacity:0.8; transform:translateY(4px); }
-          100% { opacity:0; transform:translateY(16px); }
-        }
-
-        .hm-radical-text { background: linear-gradient(120deg, #38bdf8, #e0f2fe, #7dd3fc, #38bdf8); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: hm-radicalShimmer 4s ease infinite; filter: drop-shadow(0 4px 20px rgba(56,189,248,0.3)); }
+        .hm-scroll-hint { position:absolute; bottom:3rem; left:50%; transform:translateX(-50%); z-index:20; animation:hm-hintBounce 2s ease-in-out infinite; }
+        .hm-scroll-wheel { width:28px; height:46px; border:2px solid rgba(255,255,255,0.5); border-radius:16px; display:flex; justify-content:center; padding-top:10px; background: rgba(0,0,0,0.2); backdrop-filter: blur(4px); }
+        .hm-scroll-dot { width:4px; height:8px; background:#fff; border-radius:2px; animation:hm-dotDrop 1.5s ease-in-out infinite; box-shadow: 0 0 10px #38bdf8; opacity: 0.8; }
+        @keyframes hm-hintBounce { 0%,100% { transform:translateX(-50%) translateY(0); } 50% { transform:translateX(-50%) translateY(12px); } }
+        @keyframes hm-dotDrop { 0% { opacity:0; transform:translateY(-4px); } 30% { opacity:0.8; transform:translateY(4px); } 100% { opacity:0; transform:translateY(16px); } }
+        .hm-radical-text { background: linear-gradient(120deg, #38bdf8, #e0f2fe, #7dd3fc, #38bdf8); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: hm-radicalShimmer 4s ease infinite; }
         @keyframes hm-radicalShimmer { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .hm-hero-img { animation: hm-heroZoom 25s ease-in-out infinite alternate; transform-origin: center center; }
+        .hm-hero-img { animation: hm-heroZoom 25s ease-in-out infinite alternate; }
         @keyframes hm-heroZoom { from { transform: scale(1); } to { transform: scale(1.12); } }
         .hm-gradient-text { background: linear-gradient(270deg, #0ea5e9, #38bdf8, #e0f2fe, #0ea5e9, #0ea5e9); background-size: 300% 300%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: hm-gradientShift 6s ease infinite; }
         @keyframes hm-gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
-        .hm-orb { position: absolute; border-radius: 50%; pointer-events: none; filter: blur(80px); z-index: 1; animation: hm-float 18s ease-in-out infinite; }
+        .hm-orb { position: absolute; border-radius: 50%; filter: blur(80px); z-index: 1; animation: hm-float 18s ease-in-out infinite; }
         .hm-orb-1 { width:500px; height:500px; top:-5%; right:-8%; background:rgba(225,29,72,0.08); }
         .hm-orb-2 { width:350px; height:350px; bottom:10%; left:-5%; background:rgba(99,102,241,0.06); animation-delay:-7s; }
         @keyframes hm-float { 0%,100% { transform:translate(0,0) scale(1); } 33% { transform:translate(20px,-30px) scale(1.05); } 66% { transform:translate(-15px,20px) scale(0.97); } }
-        .hm-btn-primary { display:inline-flex; align-items:center; gap:10px; padding:1.1rem 3rem; border-radius:100px; background:linear-gradient(135deg,#0ea5e9,#0284c7); color:#fff; font-weight:800; font-size:1.05rem; }
+        .hm-btn-primary { display:inline-flex; align-items:center; gap:10px; padding:1.1rem 3rem; border-radius:100px; background:linear-gradient(135deg,#0ea5e9,#0284c7); color:#fff; font-weight:800; font-size:1.05rem; box-shadow:0 14px 44px rgba(14,165,233,.35); text-decoration:none; }
+        .hm-btn-ghost { display:inline-flex; align-items:center; gap:8px; padding:1.1rem 2.4rem; border-radius:100px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); color:rgba(255,255,255,.8); font-weight:700; font-size:1rem; text-decoration:none; }
         .stat-card { padding:2.5rem 2rem; border-radius:24px; background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); }
+        .hm-skeleton { height:420px; border-radius:24px; background:linear-gradient(110deg,rgba(255,255,255,.03) 8%,rgba(255,255,255,.06) 18%,rgba(255,255,255,.03) 33%); background-size:200% 100%; animation:hm-shimmer 1.5s linear infinite; }
         @keyframes hm-shimmer { to { background-position-x:-200%; } }
-        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
     </div>
   );
@@ -539,7 +397,7 @@ function CourseCard({ course, idx, onWatchDemo }) {
     <div className="sr" style={{ '--delay': `${idx * 0.12}s` }} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}>
       <div style={{ borderRadius: '24px', overflow: 'hidden', background: hov ? '#111827' : '#0b1120', border: `1px solid ${hov ? c + '44' : 'rgba(255,255,255,0.07)'}`, boxShadow: hov ? `0 25px 60px ${c}22` : '0 4px 15px rgba(0,0,0,0.25)', transition: 'all .35s ease' }}>
         <div style={{ height: '200px', background: `linear-gradient(135deg,${c}22,${c}08)`, position: 'relative', overflow: 'hidden' }}>
-          {course.thumbnail_url && <img src={course.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: hov ? .95 : .8, transition: 'opacity .3s, transform .6s', transform: hov ? 'scale(1.06)' : 'scale(1)' }} />}
+          {course.thumbnail_url && <img src={course.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: hov ? .95 : .8, transition: 'opacity .3s, transform .6s', transform: hov ? 'scale(1.06)' : 'scale(1)' }} loading="lazy" />}
           <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(to bottom,transparent 50%,rgba(11,17,32,0.95))` }} />
           <div style={{ position: 'absolute', top: '1rem', right: '1rem', background: c, color: '#fff', padding: '4px 14px', borderRadius: '100px', fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>{course.class_type || 'Theory'}</div>
         </div>
@@ -547,7 +405,7 @@ function CourseCard({ course, idx, onWatchDemo }) {
           <div style={{ color: c, fontSize: '0.75rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '0.5rem' }}>Grade {course.year || 'A/L'} • {course.subject}</div>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#fff', marginBottom: '1.5rem', lineHeight: '1.4' }}>{course.title}</h3>
           {course.free_lesson_url && (
-            <button onClick={(e) => { e.preventDefault(); onWatchDemo(course.free_lesson_url); }} style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', background: 'transparent', border: `1px solid ${c}`, color: c, fontWeight: 800, fontSize: '0.85rem', marginBottom: '1rem', cursor: 'pointer' }}>Watch Free Demo</button>
+            <button onClick={(e) => { e.preventDefault(); onWatchDemo(course.free_lesson_url); }} style={{ width: '100%', padding: '0.75rem', borderRadius: '100px', background: 'transparent', border: `1px solid ${c}`, color: c, fontWeight: 800, fontSize: '0.85rem', marginBottom: '1rem', cursor: 'pointer' }}>Watch Free Demo</button>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}><span style={{ fontSize: '1.5rem', fontWeight: 900 }}>{course.price}</span><Link to="/register" style={{ background: c, color: '#fff', padding: '0.55rem 1.4rem', borderRadius: '12px', fontWeight: 700, fontSize: '0.9rem', textDecoration: 'none' }}>Enroll Now</Link></div>
         </div>
