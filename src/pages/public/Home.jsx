@@ -449,9 +449,22 @@ export default function Home() {
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '1.1rem', maxWidth: '550px', margin: '0 auto 3rem', lineHeight: 1.7 }}>
             Join thousands of successful students and start your Commerce journey today.
           </p>
-          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/register" className="hm-btn-primary">ලියාපදිංචි වන්න <ArrowRight size={20} /></Link>
-            <Link to="/contact" className="hm-btn-ghost">සම්බන්ධ වන්න</Link>
+          <div style={{ display: 'flex', gap: '1.25rem', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+            <Link to="/register" className="hm-btn-primary" style={{ minWidth: '220px', justifyContent: 'center' }}>
+                ලියාපදිංචි වන්න <ArrowRight size={20} />
+            </Link>
+            <Link to="/contact" className="hm-btn-ghost" style={{ 
+                minWidth: '220px', 
+                justifyContent: 'center', 
+                border: '1px solid #38bdf866', 
+                color: '#38bdf8',
+                background: 'rgba(56, 189, 248, 0.05)',
+                backdropFilter: 'blur(10px)',
+                fontWeight: 800,
+                borderRadius: '100px'
+            }}>
+                සම්බන්ධ වන්න
+            </Link>
           </div>
         </div>
       </section>
