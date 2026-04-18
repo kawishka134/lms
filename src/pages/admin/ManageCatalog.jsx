@@ -43,6 +43,7 @@ export default function ManageCatalog() {
     const videoInputRef = useRef(null);
     const [showVideoLibrary, setShowVideoLibrary] = useState(false);
     const [existingVideos, setExistingVideos] = useState([]);
+    const [dynamicBatches, setDynamicBatches] = useState([2024, 2025, 2026, 2027]);
 
     const commonSubjects = ['Accounting', 'Business Studies', 'Economics', 'O/L Commerce'];
 
@@ -54,7 +55,14 @@ export default function ManageCatalog() {
         }
         
         const { data: cData } = await query;
-        if (cData) setCourses(cData);
+        if (cData) {
+            setCourses(cData);
+            // Extract unique batches from existing courses
+            const uniqueBatches = [...new Set(cData.map(c => c.batch).filter(Boolean))].map(b => parseInt(b)).sort((a, b) => b - a);
+            // Merge with defaults and keep unique
+            const merged = [...new Set([...uniqueBatches, 2024, 2025, 2026, 2027])].sort((a,b) => b-a);
+            setDynamicBatches(merged);
+        }
         
         // Fetch instructors WITH bank details so we can auto-fill
         const { data: iData } = await supabase.from('instructors').select('id, name, bank_name, bank_account_no, bank_account_name, bank_branch');
@@ -81,9 +89,12 @@ export default function ManageCatalog() {
     useEffect(() => {
         if (!editingId && formData.year && formData.subject && formData.class_type) {
             const batchStr = formData.batch ? `${formData.batch} ` : '';
-            const suggested = `${batchStr}Grade ${formData.year} ${formData.subject} ${formData.class_type}`;
-            // If title is empty or matches last auto-gen, update it
-            if (!formData.title || formData.title === lastAutoTitle.current) {
+            // Match the user's preference: Year ClassType - Grade Subject
+            const suggested = `${batchStr}${formData.class_type} - Grade ${formData.year} ${formData.subject}`;
+            
+            // If title is currently empty OR matches the last thing we auto-generated, keep updating it
+            const currentTitle = formData.title.trim();
+            if (!currentTitle || currentTitle === lastAutoTitle.current) {
                 setFormData(prev => ({ ...prev, title: suggested }));
                 lastAutoTitle.current = suggested;
             }
@@ -264,7 +275,7 @@ export default function ManageCatalog() {
             is_free_trial: course.is_free_trial || false,
             trial_duration: course.trial_duration || ''
         });
-        setIsOtherBatch(![2024, 2025, 2026, 2027].includes(parseInt(course.batch)) && course.batch !== '');
+        setIsOtherBatch(!dynamicBatches.includes(parseInt(course.batch)) && course.batch !== '');
         setEditingId(course.id);
         setActiveTab('add');
     };
@@ -377,7 +388,7 @@ export default function ManageCatalog() {
                                     }}
                                 >
                                     <option value="">-- Optional --</option>
-                                    {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y} Intake</option>)}
+                                    {dynamicBatches.map(y => <option key={y} value={y}>{y}</option>)}
                                     <option value="Other">+ Add New Intake</option>
                                 </select>
                                 {isOtherBatch && (
