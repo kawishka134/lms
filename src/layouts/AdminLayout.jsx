@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, CheckSquare, LogOut, BookOpen, 
   CreditCard, PlayCircle, Video, Clock, Calendar, 
-  Megaphone, FileText, Save, Users, PieChart, HardDrive
+  Megaphone, FileText, Save, Users, PieChart, HardDrive, ClipboardList
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -89,6 +89,7 @@ export default function AdminLayout() {
 
   let sidebarLinks = [
     { name: 'Overview', path: '/admin/dashboard', icon: <LayoutDashboard size={18} /> },
+    { name: 'MCQ Exams', path: '/admin/mcq', icon: <ClipboardList size={18} /> },
     { name: 'Finance & Analytics', path: '/admin/analytics', icon: <PieChart size={18} /> },
     { name: 'Approvals', path: '/admin/approvals', icon: <CheckSquare size={18} />, badge: notifications.approvals },
     { name: 'Monthly Payments', path: '/admin/payments', icon: <CreditCard size={18} />, badge: notifications.payments },

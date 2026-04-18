@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Clock, AlertCircle, PlayCircle, Video, FileText, Phone, ShieldCheck,
-  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User
+  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User, ClipboardList
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -208,6 +208,13 @@ export default function Dashboard() {
   const [tuteEnrollments, setTuteEnrollments] = useState([]);
   const [selectedTute, setSelectedTute] = useState(null);
   const [showTuteModal, setShowTuteModal] = useState(false);
+  const [mcqExams, setMcqExams] = useState([]);
+  const [activeMcqExam, setActiveMcqExam] = useState(null);
+  const [mcqAnswers, setMcqAnswers] = useState({});
+  const [mcqResult, setMcqResult] = useState(null);
+  const [mcqTimeLeft, setMcqTimeLeft] = useState(null);
+  const [activeMcqIdx, setActiveMcqIdx] = useState(0);
+  const mcqTimerRef = useRef(null);
 
   // Notifications
   const [newNoticesCount, setNewNoticesCount] = useState(0);
@@ -401,6 +408,18 @@ export default function Dashboard() {
 
                       const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
                       if(myTutes && isMounted) setTuteEnrollments(myTutes);
+
+                      // Fetch MCQ Exams for enrolled courses
+                      const enrolledCourseIds = (enrollData || []).filter(e => e.status === 'approved').map(e => e.course_id);
+                      if (enrolledCourseIds.length > 0) {
+                          const { data: mcqData } = await supabase
+                              .from('mcq_exams')
+                              .select('*, courses(title)')
+                              .in('course_id', enrolledCourseIds)
+                              .eq('is_published', true)
+                              .order('created_at', { ascending: false });
+                          if (mcqData && isMounted) setMcqExams(mcqData);
+                      }
 
                       const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
                       if(settings) setInstituteSettings(settings);
@@ -643,6 +662,7 @@ export default function Dashboard() {
     { id: 'live_today', label: 'Live Today', icon: <Clock size={18} />, isPremium: true },
     { id: 'class_schedule', label: 'Class Schedule', icon: <Calendar size={18} />, isPremium: true },
     { id: 'tute_pdf', label: 'Class Tute PDF', icon: <FileText size={18} />, isPremium: true },
+    { id: 'mcq_exams', label: 'MCQ Exams', icon: <ClipboardList size={18} />, isPremium: true },
     { id: 'special_announce', label: 'Special Announce', icon: <Megaphone size={18} /> },
     { id: 'about_me', label: 'About Me', icon: <UserCircle size={18} /> },
   ];
@@ -1185,8 +1205,223 @@ export default function Dashboard() {
                     </div>
                 </div>
             );
+        case 'mcq_exams':
+            // --- Helpers defined inside case ---
+            const submitMcq = async () => {
+                if (!activeMcqExam) return;
+                clearInterval(mcqTimerRef.current);
+                const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', activeMcqExam.id);
+                let score = 0;
+                const review = {};
+                (correctAnswers || []).forEach(a => {
+                    const studentAns = mcqAnswers[a.question_number];
+                    const isCorrect = studentAns === a.correct_option;
+                    if (isCorrect) score++;
+                    review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
+                });
+                const { data: { session } } = await supabase.auth.getSession();
+                await supabase.from('mcq_attempts').upsert({
+                    student_id: session.user.id, exam_id: activeMcqExam.id,
+                    student_answers: mcqAnswers, score, completed_at: new Date().toISOString(), is_submitted: true
+                }, { onConflict: 'student_id,exam_id' });
+                setMcqResult({ score, total: correctAnswers?.length || activeMcqExam.num_questions, review });
+                setActiveMcqExam(null);
+            };
+
+            const startMcq = async (exam) => {
+                // Load questions from mcq_questions table
+                const { data: qData } = await supabase.from('mcq_questions').select('*').eq('exam_id', exam.id).order('question_number');
+                setActiveMcqExam({ ...exam, questions: qData || [] });
+                setMcqAnswers({});
+                setMcqResult(null);
+                setMcqTimeLeft(exam.time_limit_minutes * 60);
+                clearInterval(mcqTimerRef.current);
+                mcqTimerRef.current = setInterval(() => {
+                    setMcqTimeLeft(prev => {
+                        if (prev <= 1) { clearInterval(mcqTimerRef.current); submitMcq(); return 0; }
+                        return prev - 1;
+                    });
+                }, 1000);
+            };
+
+            // RESULT SCREEN
+            if (mcqResult) {
+                const pct = Math.round((mcqResult.score / mcqResult.total) * 100);
+                const emoji = pct >= 75 ? '🎉' : pct >= 50 ? '👍' : '📖';
+                const msg = pct >= 75 ? 'Excellent Work!' : pct >= 50 ? 'Good Try!' : 'Keep Studying!';
+                const color = pct >= 75 ? '#16a34a' : pct >= 50 ? '#d97706' : '#ef4444';
+                const bg = pct >= 75 ? '#f0fdf4' : pct >= 50 ? '#fffbeb' : '#fef2f2';
+                return (
+                    <div style={{ maxWidth: '680px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                        <div className="card" style={{ padding: '3rem', textAlign: 'center', background: bg }}>
+                            <div style={{ fontSize: '5rem', marginBottom: '1rem', lineHeight: 1 }}>{emoji}</div>
+                            <h2 style={{ fontWeight: 900, fontSize: '2rem', marginBottom: '0.5rem', color }}>{msg}</h2>
+                            <div style={{ fontSize: '1.2rem', color: '#374151', marginBottom: '0.5rem' }}>
+                                You scored <span style={{ fontSize: '2.5rem', fontWeight: 900, color }}>{mcqResult.score}</span>
+                                <span style={{ color: '#9ca3af' }}> / {mcqResult.total}</span>
+                            </div>
+                            <div style={{ fontSize: '3rem', fontWeight: 900, color, marginBottom: '2rem' }}>{pct}%</div>
+                            {/* Progress bar */}
+                            <div style={{ height: '12px', backgroundColor: '#e5e7eb', borderRadius: '99px', overflow: 'hidden', marginBottom: '2rem' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, backgroundColor: color, borderRadius: '99px', transition: 'width 1s ease' }} />
+                            </div>
+                            <button onClick={() => setMcqResult(null)} className="btn btn-primary" style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}>Back to Exams</button>
+                        </div>
+                        {/* Review Grid */}
+                        <div className="card" style={{ padding: '1.5rem' }}>
+                            <h3 style={{ fontWeight: 900, marginBottom: '1rem', fontSize: '1rem' }}>Question Review</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))', gap: '0.5rem' }}>
+                                {Object.entries(mcqResult.review).map(([qNum, r]) => (
+                                    <div key={qNum} title={r.isCorrect ? `Q${qNum}: Correct ✓` : `Q${qNum}: Your ans ${r.student || '—'}, Correct: ${r.correct}`}
+                                        style={{ padding: '0.5rem', borderRadius: '10px', backgroundColor: r.isCorrect ? '#dcfce7' : '#fee2e2', textAlign: 'center', cursor: 'default' }}>
+                                        <div style={{ fontSize: '0.7rem', fontWeight: 800, color: r.isCorrect ? '#15803d' : '#dc2626' }}>Q{qNum}</div>
+                                        <div style={{ fontSize: '1rem' }}>{r.isCorrect ? '✓' : '✗'}</div>
+                                        {!r.isCorrect && <div style={{ fontSize: '0.65rem', color: '#6b7280' }}>→{r.correct}</div>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // ACTIVE EXAM — Telegram-style one-by-one
+            if (activeMcqExam) {
+                const qList = activeMcqExam.questions || [];
+                const currentQ = qList[activeMcqIdx] || null;
+                const mins = String(Math.floor(mcqTimeLeft / 60)).padStart(2, '0');
+                const secs = String(mcqTimeLeft % 60).padStart(2, '0');
+                const isLow = mcqTimeLeft < 300;
+                const totalQ = qList.length;
+                const answered = Object.keys(mcqAnswers).length;
+                const optionLabels = ['i', 'ii', 'iii', 'iv', 'v'];
+                const selectedAns = currentQ ? mcqAnswers[currentQ.question_number] : null;
+
+                const getOptionStyle = (optNum) => {
+                    if (!selectedAns) return { bg: 'white', border: '#e2e8f0', color: '#374151', transform: 'scale(1)' };
+                    if (optNum === selectedAns) {
+                        return { bg: 'var(--color-primary)', border: 'var(--color-primary)', color: 'white', transform: 'scale(1.02)' };
+                    }
+                    return { bg: '#f8fafc', border: '#f1f5f9', color: '#94a3b8', transform: 'scale(1)' };
+                };
+
+                return (
+                    <div style={{ maxWidth: '720px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        {/* Top bar */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: isLow ? '#fef2f2' : 'var(--color-surface)', padding: '1rem 1.5rem', borderRadius: '16px', border: `2px solid ${isLow ? '#ef4444' : '#e2e8f0'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                            <div>
+                                <div style={{ fontWeight: 900, fontSize: '1rem', color: 'var(--color-text)' }}>{activeMcqExam.title}</div>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{answered} of {totalQ} answered</div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <div style={{ textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.75rem', fontWeight: 900, color: isLow ? '#ef4444' : '#16a34a', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                                        {mins}:{secs}
+                                    </div>
+                                    <div style={{ fontSize: '0.65rem', fontWeight: 800, color: isLow ? '#ef4444' : '#6b7280' }}>TIME LEFT</div>
+                                </div>
+                                <button onClick={submitMcq} className="btn btn-primary" style={{ padding: '0.625rem 1.25rem', fontSize: '0.85rem' }}>Submit</button>
+                            </div>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '99px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${(activeMcqIdx / totalQ) * 100}%`, background: 'linear-gradient(90deg, var(--color-primary), #f97316)', borderRadius: '99px', transition: 'width 0.4s ease' }} />
+                        </div>
+
+                        {/* Question Card */}
+                        {currentQ ? (
+                            <div className="card" style={{ padding: '2.5rem', boxShadow: '0 8px 30px rgba(0,0,0,0.08)', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
+                                    <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), #f97316)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.9rem', flexShrink: 0 }}>
+                                        {currentQ.question_number}
+                                    </div>
+                                    <p style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', lineHeight: 1.6, margin: 0 }}>
+                                        {currentQ.question_text}
+                                    </p>
+                                </div>
+
+                                {/* Options */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    {[1, 2, 3, 4, 5].filter(n => currentQ[`option_${n}`]).map(optNum => {
+                                        const s = getOptionStyle(optNum);
+                                        return (
+                                            <button key={optNum} type="button"
+                                                onClick={() => {
+                                                    if (selectedAns) return; // locked after answer
+                                                    setMcqAnswers(prev => ({ ...prev, [currentQ.question_number]: optNum }));
+                                                    // Auto-advance after 1.2s
+                                                    setTimeout(() => {
+                                                        if (activeMcqIdx < totalQ - 1) setActiveMcqIdx(i => i + 1);
+                                                    }, 1200);
+                                                }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem', borderRadius: '12px', border: `2px solid ${s.border}`, backgroundColor: s.bg, color: s.color, cursor: selectedAns ? 'default' : 'pointer', textAlign: 'left', transition: 'all 0.25s', transform: s.transform, fontWeight: 600, fontSize: '1rem' }}>
+                                                <span style={{ width: '28px', height: '28px', borderRadius: '50%', backgroundColor: selectedAns ? (optNum === selectedAns ? 'rgba(255,255,255,0.25)' : '#f1f5f9') : 'var(--color-primary-light)', color: selectedAns ? (optNum === selectedAns ? 'white' : '#94a3b8') : 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.75rem', flexShrink: 0 }}>
+                                                    {optionLabels[optNum - 1]}
+                                                </span>
+                                                {currentQ[`option_${optNum}`]}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="card" style={{ padding: '3rem', textAlign: 'center', opacity: 0.6 }}>All questions done!</div>
+                        )}
+
+                        {/* Navigation */}
+                        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                            <button onClick={() => setActiveMcqIdx(i => Math.max(0, i - 1))} disabled={activeMcqIdx === 0} className="btn btn-outline" style={{ flex: 1, padding: '0.75rem' }}>← Previous</button>
+                            {activeMcqIdx < totalQ - 1
+                                ? <button onClick={() => setActiveMcqIdx(i => i + 1)} className="btn btn-primary" style={{ flex: 2, padding: '0.75rem' }}>Next Question →</button>
+                                : <button onClick={submitMcq} className="btn btn-primary" style={{ flex: 2, padding: '0.75rem', background: 'linear-gradient(135deg, #16a34a, #15803d)' }}>🏁 Submit Exam</button>
+                            }
+                        </div>
+
+                        {/* Question dots navigator */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'center', padding: '0.5rem' }}>
+                            {qList.map((q, idx) => (
+                                <button key={idx} onClick={() => setActiveMcqIdx(idx)}
+                                    style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2px solid', borderColor: idx === activeMcqIdx ? 'var(--color-primary)' : mcqAnswers[q.question_number] ? '#86efac' : '#e2e8f0', backgroundColor: idx === activeMcqIdx ? 'var(--color-primary)' : mcqAnswers[q.question_number] ? '#f0fdf4' : 'white', color: idx === activeMcqIdx ? 'white' : '#374151', fontSize: '0.7rem', fontWeight: 900, cursor: 'pointer', transition: 'all 0.2s' }}>
+                                    {idx + 1}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
+
+            // EXAM LIST
+            return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                    {mcqExams.length === 0 ? (
+                        <div className="card" style={{ gridColumn: '1/-1', padding: '5rem', textAlign: 'center', opacity: 0.5 }}>
+                            <ClipboardList size={48} style={{ margin: '0 auto 1rem' }} />
+                            <p style={{ fontWeight: 700 }}>No MCQ exams available yet.</p>
+                        </div>
+                    ) : mcqExams.map(exam => (
+                        <div key={exam.id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                <div style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '0.875rem', borderRadius: '14px' }}><ClipboardList size={26} /></div>
+                                <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                    <span>⏱ {exam.time_limit_minutes} min</span>
+                                    <span>📝 {exam.num_questions} Questions</span>
+                                </div>
+                            </div>
+                            <div>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.courses?.title}</span>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: '0.3rem 0 0', color: '#111827' }}>{exam.title}</h3>
+                            </div>
+                            <button onClick={() => { setActiveMcqIdx(0); startMcq(exam); }} className="btn btn-primary" style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto' }}>
+                                🚀 Start Exam
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            );
         case 'special_announce':
             return <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>{announcements.map(ann => <div key={ann.id} className="card" style={{ padding: '2.5rem', borderLeft: '6px solid var(--color-primary)' }}><h3>{ann.title}</h3><p style={{ whiteSpace: 'pre-line' }}>{ann.message}</p></div>)}</div>;
+
         case 'class_schedule':
             return (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>

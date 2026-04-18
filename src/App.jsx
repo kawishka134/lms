@@ -33,6 +33,7 @@ import ManageSettings from './pages/admin/ManageSettings';
 import ManageInstructors from './pages/admin/ManageInstructors';
 import Analytics from './pages/admin/Analytics';
 import StorageManager from './pages/admin/StorageManager';
+import ManageMCQ from './pages/admin/ManageMCQ';
 
 import { ToastProvider } from './components/Toast';
 import './App.css';
@@ -81,6 +82,7 @@ function App() {
             <Route path="instructors" element={<ManageInstructors />} />
             <Route path="settings" element={<ManageSettings />} />
             <Route path="storage" element={<StorageManager />} />
+            <Route path="mcq" element={<ManageMCQ />} />
           </Route>
         </Route>
       </Routes>
