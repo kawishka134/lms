@@ -100,6 +100,16 @@ export default function CourseDetails() {
 
         if (upsertError) throw upsertError;
 
+        // Automatically update student profile subject if it's a new subject
+        if (course && studentProfile) {
+            const currentSubjects = String(studentProfile.subject || '').trim();
+            const courseSubject = (course.subject || '').trim();
+            if (courseSubject && !currentSubjects.split(' ').some(s => s.toLowerCase() === courseSubject.toLowerCase())) {
+                const updatedSubjectString = currentSubjects ? `${currentSubjects} ${courseSubject}` : courseSubject;
+                await supabase.from('profiles').update({ subject: updatedSubjectString }).eq('id', studentProfile.id);
+            }
+        }
+
         setAccessStatus('pending');
         showToast('Receipt uploaded successfully! Admin will approve it shortly.', 'success');
     } catch (err) {
@@ -133,6 +143,16 @@ export default function CourseDetails() {
         }, { onConflict: 'student_id, course_id' });
 
         if (upsertError) throw upsertError;
+
+        // Automatically update student profile subject if it's a new subject
+        if (course && studentProfile) {
+            const currentSubjects = String(studentProfile.subject || '').trim();
+            const courseSubject = (course.subject || '').trim();
+            if (courseSubject && !currentSubjects.split(' ').some(s => s.toLowerCase() === courseSubject.toLowerCase())) {
+                const updatedSubjectString = currentSubjects ? `${currentSubjects} ${courseSubject}` : courseSubject;
+                await supabase.from('profiles').update({ subject: updatedSubjectString }).eq('id', studentProfile.id);
+            }
+        }
 
         setAccessStatus('approved');
         showToast(`Trial started! You have full access for ${trialDays} days.`, 'success');

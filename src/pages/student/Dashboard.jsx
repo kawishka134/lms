@@ -313,99 +313,94 @@ export default function Dashboard() {
                          setLastReadTime(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
                      }
 
-                     // 1. Fetch available courses and join full instructor data
-                     const { data: allCourses } = await supabase
-                         .from('courses')
-                         .select('*, instructors(*)');
-                     
-                     if (allCourses && isMounted) {
-                         const filtered = allCourses.filter(course => {
-                             const studentGrade = String(profile.grade || '').toLowerCase();
-                             const studentYear = String(profile.year || '').toLowerCase();
-                             const studentSubjects = String(profile.subject || '').toLowerCase();
-                             
-                             const courseGrade = String(course.year || '').toLowerCase();
-                             const courseBatch = String(course.batch || '').toLowerCase();
-                             const courseSubject = String(course.subject || '').toLowerCase();
+                      // 1. Fetch available current enrollments
+                      const { data: enrollData } = await supabase
+                          .from('enrollments')
+                          .select('*, courses(subject)')
+                          .eq('student_id', session.user.id);
+                      
+                      const enrolledSubjects = (enrollData || [])
+                        .filter(e => e.status === 'approved')
+                        .map(e => e.courses?.subject)
+                        .filter(Boolean)
+                        .join(' ');
 
-                             // Match Grade/Year:
-                             // Course 'year' (Grade) should match profile.grade or be contained in it (e.g. "12" in "Grade 12")
-                             const gradeMatch = studentGrade.includes(courseGrade) || studentYear.includes(courseGrade) || courseGrade.includes(studentGrade);
-                             
-                             // Match Subject:
-                             // Course 'subject' should be inside the student's combined subject string
-                             const subjectMatch = studentSubjects.includes(courseSubject);
+                      if(enrollData && isMounted) {
+                          setAllEnrollments(enrollData);
+                          const hasActive = enrollData.some(e => e.status === 'approved' && (!e.expires_at || new Date(e.expires_at) > new Date()));
+                          setEnrollmentStatus(hasActive ? 'approved' : 'not_active');
+                      }
 
-                             // Optional Batch match: if course has a batch year, it should match student's year
-                             if (courseBatch && profile.year) {
-                                 const batchMatch = studentYear.includes(courseBatch);
-                                 return gradeMatch && subjectMatch && batchMatch;
-                             }
+                      // 2. Fetch all courses for the student's grade
+                      const { data: allCourses } = await supabase
+                          .from('courses')
+                          .select('*, instructors(*)');
+                      
+                      if (allCourses && isMounted) {
+                          const filtered = allCourses.filter(course => {
+                              const studentGrade = String(profile.grade || '').toLowerCase();
+                              const studentYear = String(profile.year || '').toLowerCase();
+                              const courseGrade = String(course.year || '').toLowerCase();
+                              const courseSubject = String(course.subject || '').toLowerCase();
+                              
+                              // Grade Match
+                              const gradeMatch = studentGrade.includes(courseGrade) || studentYear.includes(courseGrade) || courseGrade.includes(studentGrade);
+                              
+                              // Subject Match (Profile Subject OR already Enrolled)
+                              const studentProfileSubjects = String(profile.subject || '').toLowerCase();
+                              const isProfileSubject = studentProfileSubjects.includes(courseSubject);
+                              const isEnrolled = (enrollData || []).some(e => e.course_id === course.id);
 
-                             return gradeMatch && subjectMatch;
-                         });
-                         setAvailableCourses(filtered);
-                     }
+                              return gradeMatch && (isProfileSubject || isEnrolled);
+                          });
+                          setAvailableCourses(filtered);
+                      }
 
-                     // 2. Fetch all current enrollments
-                     const { data: enrollData } = await supabase
-                         .from('enrollments')
-                         .select('*')
-                         .eq('student_id', session.user.id);
-                     
-                     if(enrollData && isMounted) {
-                         setAllEnrollments(enrollData);
-                         const hasActive = enrollData.some(e => e.status === 'approved' && (!e.expires_at || new Date(e.expires_at) > new Date()));
-                         setEnrollmentStatus(hasActive ? 'approved' : 'not_active');
-                     }
+                      const isAudienceMatch = (targetAudienceStr, profileData, extraSubjects = '') => {
+                          if (!targetAudienceStr || targetAudienceStr === 'All Students') return true;
+                          if (!profileData) return false;
+                          
+                          const normalizedGrade = String(profileData.grade || '').toLowerCase();
+                          const gradeWithPrefix = normalizedGrade.startsWith('grade') ? normalizedGrade : `grade ${normalizedGrade}`;
+                          
+                          const studentData = `${normalizedGrade} ${gradeWithPrefix} ${profileData.year} ${profileData.subject} ${extraSubjects} ${profileData.medium}`.toLowerCase();
+                          const targets = targetAudienceStr.split(',').map(t => t.trim().toLowerCase());
+                          
+                          return targets.some(target => {
+                              const words = target.split(' ').filter(w => w !== '');
+                              return words.every(word => studentData.includes(word));
+                          });
+                      };
 
-                     const isAudienceMatch = (targetAudienceStr, profileData) => {
-                         if (!targetAudienceStr || targetAudienceStr === 'All Students') return true;
-                         if (!profileData) return false;
-                         
-                         // Prepend 'grade' to numeric grade for better matching (e.g. "12" becomes "grade 12")
-                         const normalizedGrade = String(profileData.grade || '').toLowerCase();
-                         const gradeWithPrefix = normalizedGrade.startsWith('grade') ? normalizedGrade : `grade ${normalizedGrade}`;
-                         
-                         const studentData = `${normalizedGrade} ${gradeWithPrefix} ${profileData.year} ${profileData.subject} ${profileData.medium}`.toLowerCase();
-                         const targets = targetAudienceStr.split(',').map(t => t.trim().toLowerCase());
-                         
-                         return targets.some(target => {
-                             const words = target.split(' ').filter(w => w !== '');
-                             // Every word in the target segment (e.g., "Grade 12 Economics") must exist in student's data
-                             return words.every(word => studentData.includes(word));
-                         });
-                     };
+                      // 3. Load other filtered content
+                      const { data: notices } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+                      if(notices) setAnnouncements(notices.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
 
-                     // Load filtered content
-                     const { data: notices } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-                     if(notices) setAnnouncements(notices.filter(n => isAudienceMatch(n.target_audience, profile)));
+                      const { data: timetable } = await supabase.from('schedules').select('*').order('created_at', { ascending: false });
+                      if(timetable) setSchedules(timetable.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
 
-                     const { data: timetable } = await supabase.from('schedules').select('*').order('created_at', { ascending: false });
-                     if(timetable) setSchedules(timetable.filter(n => isAudienceMatch(n.target_audience, profile)));
+                      const { data: sessions } = await supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
+                      if(sessions) setLiveSessions(sessions);
 
-                     const { data: sessions } = await supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
-                     if(sessions) setLiveSessions(sessions);
+                      const { data: freeContent } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
+                      if(freeContent) setFreeClasses(freeContent.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
 
-                     const { data: freeContent } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
-                     if(freeContent) setFreeClasses(freeContent.filter(n => isAudienceMatch(n.target_audience, profile)));
+                      const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
+                      if(records) setRecordings(records.filter(r => isAudienceMatch(r.target_audience, profile, enrolledSubjects)));
 
-                     const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
-                     if(records) setRecordings(records.filter(r => isAudienceMatch(r.target_audience, profile)));
+                      const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
+                      if(recAccess && isMounted) setRecordingAccess(recAccess);
 
-                     const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
-                     if(recAccess && isMounted) setRecordingAccess(recAccess);
+                      const { data: allDocs } = await supabase.from('tutes').select('*, instructors(*)').order('created_at', { ascending: false });
+                      if(allDocs && isMounted) {
+                          setTutes(allDocs.filter(d => isAudienceMatch(d.target_audience, profile, enrolledSubjects)));
+                      }
 
-                     const { data: allDocs } = await supabase.from('tutes').select('*, instructors(*)').order('created_at', { ascending: false });
-                     if(allDocs && isMounted) {
-                         setTutes(allDocs.filter(d => isAudienceMatch(d.target_audience, profile)));
-                     }
+                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
+                      if(myTutes && isMounted) setTuteEnrollments(myTutes);
 
-                     const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
-                     if(myTutes && isMounted) setTuteEnrollments(myTutes);
-
-                     const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
-                     if(settings) setInstituteSettings(settings);
+                      const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
+                      if(settings) setInstituteSettings(settings);
                  } else {
                      // NO PROFILE FOUND IN DB - forcefully log out this invalid session!
                      await supabase.auth.signOut();
@@ -465,8 +460,20 @@ export default function Dashboard() {
 
         if (upsertError) throw upsertError;
 
-        // SMS Notifications
         const courseInfo = availableCourses.find(c => c.id === selectedCourseId);
+
+        // Automatically update student profile subject if it's a new subject
+        if (courseInfo && studentProfile) {
+            const currentSubjects = String(studentProfile.subject || '').trim();
+            const courseSubject = (courseInfo.subject || '').trim();
+            
+            if (courseSubject && !currentSubjects.split(' ').some(s => s.toLowerCase() === courseSubject.toLowerCase())) {
+                const updatedSubjectString = currentSubjects ? `${currentSubjects} ${courseSubject}` : courseSubject;
+                await supabase.from('profiles').update({ subject: updatedSubjectString }).eq('id', studentProfile.id);
+            }
+        }
+
+        // SMS Notifications
         if (courseInfo) {
             try {
                 // Fetch Instructor
@@ -648,10 +655,9 @@ export default function Dashboard() {
                 </div>
             );
         case 'free_class':
-            // Logic: Live events expire 2 hours after start (if date/time exists) or if explicitly expired
             const isActuallyLive = (item) => {
                 if (!item.is_live) return false;
-                if (!item.expires_at) return true; // If no expiry set, keep it live
+                if (!item.expires_at) return true;
                 return new Date(item.expires_at) > new Date();
             };
 
@@ -667,7 +673,6 @@ export default function Dashboard() {
 
             return (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
-                    {/* Live & Featured Free Classes (Banners) */}
                     {allLiveFree.length > 0 && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                             <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Clock size={18} /> Today's Live Events</h3>
@@ -702,7 +707,6 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* Permanent Free Content Library */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><PlayCircle size={18} /> Lesson Library</h3>
                         {filteredFree.length === 0 ? (
@@ -909,68 +913,68 @@ export default function Dashboard() {
                                     )}
                                 </div>
                             </div>
-                    );
-                })}
-            </div>
-        );
-    case 'tute_pdf':
-        const filteredTutes = tutes.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase()));
-        return (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
-                {filteredTutes.map(tute => {
-                    const myEnroll = tuteEnrollments.find(e => e.tute_id === tute.id);
-                    const isApproved = myEnroll?.status === 'approved';
-                    const expiresAt = myEnroll?.expires_at ? new Date(myEnroll.expires_at) : null;
-                    const isExpired = isApproved && expiresAt && expiresAt < new Date();
-                    const isUnlocked = tute.is_free || (isApproved && !isExpired);
+                        );
+                    })}
+                </div>
+            );
+        case 'tute_pdf':
+            const filteredTutes = tutes.filter(i => i.title.toLowerCase().includes(searchQuery.toLowerCase()));
+            return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                    {filteredTutes.map(tute => {
+                        const myEnroll = tuteEnrollments.find(e => e.tute_id === tute.id);
+                        const isApproved = myEnroll?.status === 'approved';
+                        const expiresAt = myEnroll?.expires_at ? new Date(myEnroll.expires_at) : null;
+                        const isExpired = isApproved && expiresAt && expiresAt < new Date();
+                        const isUnlocked = tute.is_free || (isApproved && !isExpired);
 
-                    return (
-                        <div key={tute.id} className="card" style={{ borderLeft: isUnlocked ? '6px solid var(--color-success)' : isExpired ? '6px solid #ef4444' : '6px solid var(--color-primary-light)', opacity: isExpired ? 0.9 : 1 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                {tute.is_free ? <span className="badge badge-success">FREE TUTE</span> : isExpired ? <span className="badge badge-danger">ACCESS EXPIRED</span> : <span className="badge badge-primary">PREMIUM (Rs. {tute.price})</span>}
-                                {!tute.is_free && myEnroll?.status === 'pending' && <span className="badge badge-warning" style={{ color: 'white' }}>PENDING REVIEW</span>}
-                                {isApproved && !isExpired && expiresAt && (
-                                    <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Clock size={12} /> {Math.ceil((expiresAt - new Date()) / 3600000)}h left
+                        return (
+                            <div key={tute.id} className="card" style={{ borderLeft: isUnlocked ? '6px solid var(--color-success)' : isExpired ? '6px solid #ef4444' : '6px solid var(--color-primary-light)', opacity: isExpired ? 0.9 : 1 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                                    {tute.is_free ? <span className="badge badge-success">FREE TUTE</span> : isExpired ? <span className="badge badge-danger">ACCESS EXPIRED</span> : <span className="badge badge-primary">PREMIUM (Rs. {tute.price})</span>}
+                                    {!tute.is_free && myEnroll?.status === 'pending' && <span className="badge badge-warning" style={{ color: 'white' }}>PENDING REVIEW</span>}
+                                    {isApproved && !isExpired && expiresAt && (
+                                        <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <Clock size={12} /> {Math.ceil((expiresAt - new Date()) / 3600000)}h left
+                                        </div>
+                                    )}
+                                </div>
+                                <h3 style={{ fontWeight: 800 }}>{tute.title}</h3>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>{tute.description}</p>
+
+                                {isUnlocked ? (
+                                    <a href={tute.file_url} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #166534' }}>
+                                        <FileText size={18} /> Open/Download PDF
+                                    </a>
+                                ) : isExpired ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#991b1b', fontWeight: 800 }}>⚠️ පැය 7ක කාලය අවසන්! නැවත විවෘත කිරීමට Admin හමුවන්න.</p>
+                                        <button
+                                            onClick={() => window.open(`https://wa.me/94771234567?text=Nexus%20LMS:%20Hi,%20My%20tute%20access%20expired%20for%20(${tute.title}).%20Please%20unlock%20it.`, '_blank')}
+                                            className="btn btn-outline"
+                                            style={{ color: '#ef4444', borderColor: '#ef4444', fontWeight: 800 }}
+                                        >
+                                            Request Unlock (WhatsApp)
+                                        </button>
                                     </div>
+                                ) : myEnroll?.status === 'pending' ? (
+                                    <button disabled className="btn btn-outline" style={{ width: '100%', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
+                                        <Clock size={18} /> Waiting for Approval
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => { setSelectedTute(tute); setActiveTuteBankIdx(0); setShowTuteModal(true); }}
+                                        className="btn btn-primary"
+                                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
+                                    >
+                                        <Lock size={18} /> Buy This Tute
+                                    </button>
                                 )}
                             </div>
-                            <h3 style={{ fontWeight: 800 }}>{tute.title}</h3>
-                            <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>{tute.description}</p>
-
-                            {isUnlocked ? (
-                                <a href={tute.file_url} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #166534' }}>
-                                    <FileText size={18} /> Open/Download PDF
-                                </a>
-                            ) : isExpired ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#991b1b', fontWeight: 800 }}>⚠️ පැය 7ක කාලය අවසන්! නැවත විවෘත කිරීමට Admin හමුවන්න.</p>
-                                    <button
-                                        onClick={() => window.open(`https://wa.me/94771234567?text=Nexus%20LMS:%20Hi,%20My%20tute%20access%20expired%20for%20(${tute.title}).%20Please%20unlock%20it.`, '_blank')}
-                                        className="btn btn-outline"
-                                        style={{ color: '#ef4444', borderColor: '#ef4444', fontWeight: 800 }}
-                                    >
-                                        Request Unlock (WhatsApp)
-                                    </button>
-                                </div>
-                            ) : myEnroll?.status === 'pending' ? (
-                                <button disabled className="btn btn-outline" style={{ width: '100%', opacity: 0.5, display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-                                    <Clock size={18} /> Waiting for Approval
-                                </button>
-                            ) : (
-                                <button
-                                    onClick={() => { setSelectedTute(tute); setActiveTuteBankIdx(0); setShowTuteModal(true); }}
-                                    className="btn btn-primary"
-                                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}
-                                >
-                                    <Lock size={18} /> Buy This Tute
-                                </button>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-        );
+                        );
+                    })}
+                </div>
+            );
         case 'about_me':
             return (
                 <div className="card" style={{ padding: '2.5rem' }}>
@@ -1095,6 +1099,33 @@ export default function Dashboard() {
                                 </div>
                             );
                         })}
+
+                        <div 
+                            onClick={() => navigate('/courses')}
+                            className="card glass shimmer" 
+                            style={{ 
+                                padding: '1.5rem', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                textAlign: 'center',
+                                border: '3px dashed var(--color-primary-light)',
+                                background: 'rgba(225, 29, 72, 0.02)',
+                                cursor: 'pointer',
+                                gap: '1rem',
+                                minHeight: '300px'
+                            }}
+                        >
+                            <div style={{ width: '70px', height: '70px', borderRadius: '50%', backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                                <BookOpen size={32} />
+                            </div>
+                            <div>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 900, marginBottom: '0.5rem', color: 'var(--color-primary)' }}>Join New Subject?</h3>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>Browse our catalog to join other classes and subjects for your grade.</p>
+                            </div>
+                            <div className="btn btn-primary" style={{ width: '100%', borderRadius: '50px' }}>Browse All Classes</div>
+                        </div>
                     </div>
                 </div>
             );
