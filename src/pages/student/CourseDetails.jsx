@@ -82,6 +82,32 @@ export default function CourseDetails() {
 
     setIsUploading(true);
     try {
+        // 1. Image Only Validation
+        if (!selectedFile.type.startsWith('image/')) {
+            throw new Error("⚠️ Invalid File Type: Please upload a clear image (JPG, PNG) of your bank receipt. Video files are not allowed.");
+        }
+
+        // 2. Duplicate Detection (Hashing)
+        const calculateHash = async (file) => {
+            const buffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        const fileHash = await calculateHash(selectedFile);
+
+        // Check for duplicates
+        const { data: duplicate } = await supabase
+            .from('enrollments')
+            .select('id, profiles(full_name)')
+            .eq('slip_hash', fileHash)
+            .maybeSingle();
+
+        if (duplicate) {
+            throw new Error(`⚠️ DUPLICATE SLIP: This receipt has already been used by ${duplicate.profiles?.full_name || 'another student'}. Submitting fake or reused receipts will result in your account being blocked.`);
+        }
+
         const fileExt = selectedFile.name.split('.').pop();
         const fileName = `slip-${session.user.id}-${id}-${Date.now()}.${fileExt}`;
         
@@ -94,8 +120,8 @@ export default function CourseDetails() {
             student_id: session.user.id,
             course_id: id,
             slip_url: data.publicUrl,
-            status: 'pending',
-            updated_at: new Date().toISOString()
+            slip_hash: fileHash, // Save the hash
+            status: 'pending'
         }, { onConflict: 'student_id, course_id' });
 
         if (upsertError) throw upsertError;
@@ -138,7 +164,6 @@ export default function CourseDetails() {
             course_id: id,
             status: 'approved',
             expires_at: expiryDate.toISOString(),
-            updated_at: new Date().toISOString(),
             payment_method: 'free_trial'
         }, { onConflict: 'student_id, course_id' });
 

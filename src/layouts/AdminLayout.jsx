@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, CheckSquare, LogOut, BookOpen, 
   CreditCard, PlayCircle, Video, Clock, Calendar, 
-  Megaphone, FileText, Save, Users, PieChart
+  Megaphone, FileText, Save, Users, PieChart, HardDrive
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -103,6 +103,7 @@ export default function AdminLayout() {
 
   if (isSuperAdmin) {
       sidebarLinks.push({ name: 'Manage Experts', path: '/admin/instructors', icon: <Users size={18} /> });
+      sidebarLinks.push({ name: 'Storage Manager', path: '/admin/storage', icon: <HardDrive size={18} /> });
       sidebarLinks.push({ name: 'Web Settings', path: '/admin/settings', icon: <Save size={18} /> });
   }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Search, FileText, RotateCcw, ShoppingBag, Users, GraduationCap, History, DollarSign, Video } from 'lucide-react';
+import { CheckCircle, XCircle, Search, FileText, RotateCcw, ShoppingBag, Users, GraduationCap, History, DollarSign, Video, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { sendSMS } from '../../utils/smsGateway';
@@ -33,7 +33,7 @@ export default function Approvals() {
     // Fetch Pending Monthly
     const { data: pending, error: errorPending } = await supabase
         .from('enrollments')
-        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), courses(title, instructor_id, instructors(name))`)
+        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email), courses(title, instructor_id, instructors(name))`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -48,7 +48,7 @@ export default function Approvals() {
     // Fetch Tute Slips
     const { data: tutes, error: errorTutes } = await supabase
         .from('tute_enrollments')
-        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
+        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -63,7 +63,7 @@ export default function Approvals() {
     // Fetch Instructor Commission Slips
     const { data: instSlips, error: errorInstSlips } = await supabase
         .from('instructor_payments')
-        .select(`id, created_at, slip_url, status, instructor_id, instructors(name, email)`)
+        .select(`id, created_at, slip_url, slip_hash, status, instructor_id, instructors(name, email)`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
@@ -465,7 +465,16 @@ export default function Approvals() {
                                   <div style={{ fontWeight: 700 }}>{s.courses?.title}</div>
                                   {s.courses?.instructors?.name && <div style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600 }}>{s.courses.instructors.name}</div>}
                               </td>
-                              <td style={{ padding: '1.25rem' }}><button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}><FileText size={16} /> Evidence</button></td>
+                              <td style={{ padding: '1.25rem' }}>
+                                  <button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                      <FileText size={16} /> Evidence
+                                  </button>
+                                  {s.slip_hash && (pendingSlips.filter(p => p.slip_hash === s.slip_hash).length > 1 || approvedSlips.some(a => a.slip_hash === s.slip_hash)) && (
+                                      <div style={{ marginTop: '0.5rem', color: '#ef4444', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <AlertCircle size={10} /> Duplicate Slip!
+                                      </div>
+                                  )}
+                              </td>
                               <td style={{ padding: '1.25rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
                                         <button onClick={() => handleAction('enrollments', s.id, 'approved')} className="btn btn-primary" style={{ backgroundColor: '#10b981' }}>Approve</button>
@@ -575,7 +584,14 @@ export default function Approvals() {
                                   <div style={{ fontWeight: 700 }}>{s.tutes?.title}</div>
                                   <div style={{ fontSize: '0.85rem', color: '#7c3aed', fontWeight: 800 }}>Rs. {s.tutes?.price}</div>
                               </td>
-                              <td style={{ padding: '1.25rem' }}><button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.3rem 0.6rem' }}>View</button></td>
+                              <td style={{ padding: '1.25rem' }}>
+                                  <button onClick={() => setSelectedImage(s.slip_url)} className="btn btn-outline" style={{ padding: '0.3rem 0.6rem' }}>View</button>
+                                  {s.slip_hash && (tuteSlips.filter(t => t.slip_hash === s.slip_hash).length > 1 || approvedTutes.some(a => a.slip_hash === s.slip_hash)) && (
+                                      <div style={{ marginTop: '0.5rem', color: '#ef4444', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                          <AlertCircle size={10} /> Duplicate Slip!
+                                      </div>
+                                  )}
+                              </td>
                               <td style={{ padding: '1.25rem', textAlign: 'right' }}>
                                     <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                                         <button onClick={() => handleAction('tute_enrollments', s.id, 'approved')} className="btn btn-primary" style={{ backgroundColor: '#8b5cf6' }}>Approve</button>

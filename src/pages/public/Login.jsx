@@ -111,6 +111,30 @@ export default function Login() {
       
       setUploadLoading(true);
       try {
+          // 1. Image Restriction
+          if (!file.type.startsWith('image/')) {
+              throw new Error("⚠️ Invalid File: Please upload an image of your payment receipt. Video files are not supported.");
+          }
+
+          // 2. Duplicate Detection
+          const calculateHash = async (f) => {
+              const buffer = await f.arrayBuffer();
+              const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+              const hashArray = Array.from(new Uint8Array(hashBuffer));
+              return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+          };
+          const fileHash = await calculateHash(file);
+
+          const { data: duplicate } = await supabase
+              .from('instructor_payments')
+              .select('id, instructors(name)')
+              .eq('slip_hash', fileHash)
+              .maybeSingle();
+
+          if (duplicate) {
+              throw new Error(`⚠️ DUPLICATE SLIP: This receipt has already been used by ${duplicate.instructors?.name || 'another instructor'}. Submission of duplicate slips is monitored.`);
+          }
+
           const fileExt = file.name.split('.').pop();
           const fileName = `${lockedInstructor.id}_unlock_${Date.now()}.${fileExt}`;
           const filePath = `commissions/${fileName}`;
@@ -123,6 +147,7 @@ export default function Login() {
           const { error: dbError } = await supabase.from('instructor_payments').insert([{ 
               instructor_id: lockedInstructor.id, 
               slip_url: publicUrl, 
+              slip_hash: fileHash,
               amount: Number(cleanAmount),
               status: 'pending' 
           }]);

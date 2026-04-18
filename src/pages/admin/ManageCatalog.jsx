@@ -41,6 +41,8 @@ export default function ManageCatalog() {
     const [isOtherBatch, setIsOtherBatch] = useState(false); // Added
     const fileInputRef = useRef(null);
     const videoInputRef = useRef(null);
+    const [showVideoLibrary, setShowVideoLibrary] = useState(false);
+    const [existingVideos, setExistingVideos] = useState([]);
 
     const commonSubjects = ['Accounting', 'Business Studies', 'Economics', 'O/L Commerce'];
 
@@ -74,6 +76,19 @@ export default function ManageCatalog() {
 
         const submissionData = { ...formData };
         
+        // 1. Data Cleaning for Numeric Fields (Prevent "invalid input syntax for type integer: ''")
+        if (submissionData.year === '') submissionData.year = null;
+        else submissionData.year = parseInt(submissionData.year);
+
+        if (submissionData.batch === '') submissionData.batch = null;
+        else if (!isNaN(submissionData.batch)) submissionData.batch = parseInt(submissionData.batch);
+        
+        if (!submissionData.is_free_trial || submissionData.trial_duration === '') {
+            submissionData.trial_duration = null;
+        } else {
+            submissionData.trial_duration = parseInt(submissionData.trial_duration);
+        }
+
         // If normal instructor, force instructor_id to current user
         if (!isSuperAdmin) {
             submissionData.instructor_id = currentInstructorId;
@@ -148,6 +163,55 @@ export default function ManageCatalog() {
             showToast("Video upload failed: " + error.message, 'error');
         } finally {
             setIsUploadingVideo(false);
+        }
+    };
+
+    const fetchExistingVideos = async () => {
+        try {
+            // 1. List files from Storage directly
+            const { data: storageFiles, error: storageErr } = await supabase.storage.from('promo_videos').list('promo');
+            if (storageErr) throw storageErr;
+
+            // 2. Get from courses to match titles where possible
+            const { data: courseData } = await supabase.from('courses').select('promo_video_url, title').not('promo_video_url', 'is', null);
+
+            const library = [];
+            const seenUrls = new Set();
+
+            if (storageFiles) {
+                storageFiles.forEach(file => {
+                    if (file.name === '.emptyFolderPlaceholder') return;
+                    
+                    const { data: { publicUrl } } = supabase.storage.from('promo_videos').getPublicUrl(`promo/${file.name}`);
+                    
+                    // Look for a course title that uses this URL
+                    const matchingCourse = courseData?.find(c => c.promo_video_url === publicUrl);
+                    
+                    library.push({
+                        promo_video_url: publicUrl,
+                        title: matchingCourse ? `Used in: ${matchingCourse.title}` : `File: ${file.name.slice(0, 20)}...`
+                    });
+                    seenUrls.add(publicUrl);
+                });
+            }
+
+            // Add any YouTube links found in courses as well (optional, but good)
+            if (courseData) {
+                courseData.forEach(c => {
+                    if (c.promo_video_url && !seenUrls.has(c.promo_video_url)) {
+                        library.push({
+                            promo_video_url: c.promo_video_url,
+                            title: `YT Link in: ${c.title}`
+                        });
+                        seenUrls.add(c.promo_video_url);
+                    }
+                });
+            }
+
+            setExistingVideos(library);
+            setShowVideoLibrary(true);
+        } catch (err) {
+            showToast("Failed to load video library: " + err.message, 'error');
         }
     };
 
@@ -417,15 +481,25 @@ export default function ManageCatalog() {
                                             <label className="input-label" style={{ fontSize: '0.75rem' }}>Promo Video (YouTube URL or Upload)</label>
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                                 <input className="input-field" style={{ backgroundColor: 'white' }} value={formData.promo_video_url} onChange={e => setFormData({...formData, promo_video_url: e.target.value})} placeholder="YouTube URL or Uploaded Link" />
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => videoInputRef.current.click()} 
-                                                    className="btn btn-outline" 
-                                                    style={{ fontSize: '0.75rem', padding: '0.4rem', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
-                                                    disabled={isUploadingVideo}
-                                                >
-                                                    {isUploadingVideo ? 'Uploading...' : 'Upload MP4 Video (Max 15MB)'}
-                                                </button>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => videoInputRef.current.click()} 
+                                                        className="btn btn-outline" 
+                                                        style={{ fontSize: '0.7rem', padding: '0.4rem', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}
+                                                        disabled={isUploadingVideo}
+                                                    >
+                                                        {isUploadingVideo ? 'Uploading...' : 'Upload MP4'}
+                                                    </button>
+                                                    <button 
+                                                        type="button"
+                                                        onClick={fetchExistingVideos} 
+                                                        className="btn btn-outline" 
+                                                        style={{ fontSize: '0.7rem', padding: '0.4rem', borderColor: '#64748b', color: '#64748b' }}
+                                                    >
+                                                        Select Uploaded
+                                                    </button>
+                                                </div>
                                                 <input type="file" ref={videoInputRef} accept="video/mp4" style={{ display: 'none' }} onChange={handleVideoUpload} />
                                             </div>
                                         </div>
@@ -513,6 +587,45 @@ export default function ManageCatalog() {
                 </div>
             )}
 
+            {/* Video Library Modal */}
+            {showVideoLibrary && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '500px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
+                        <div style={{ padding: '1.5rem', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ margin: 0, fontWeight: 900 }}>Promo Video Library</h3>
+                            <button onClick={() => setShowVideoLibrary(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem' }}>&times;</button>
+                        </div>
+                        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+                            {existingVideos.length === 0 ? (
+                                <p style={{ textAlign: 'center', opacity: 0.5, padding: '2rem' }}>No previously uploaded videos found.</p>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    {existingVideos.map((vid, idx) => (
+                                        <button 
+                                            key={idx} 
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData({ ...formData, promo_video_url: vid.promo_video_url });
+                                                setShowVideoLibrary(false);
+                                                showToast("Video selected from library", 'success');
+                                            }}
+                                            style={{ textAlign: 'left', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '12px', background: 'white', cursor: 'pointer', transition: 'all 0.2s' }}
+                                            onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--color-primary)'}
+                                            onMouseLeave={e => e.currentTarget.style.borderColor = '#e2e8f0'}
+                                        >
+                                            <div style={{ fontWeight: 800, fontSize: '0.85rem', marginBottom: '0.25rem' }}>Used in: {vid.title}</div>
+                                            <div style={{ fontSize: '0.7rem', opacity: 0.5, wordBreak: 'break-all' }}>{vid.promo_video_url}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div style={{ padding: '1rem', backgroundColor: '#f8fafc', textAlign: 'center' }}>
+                            <button onClick={() => setShowVideoLibrary(false)} className="btn btn-outline" style={{ width: '100%' }}>Close</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -32,6 +32,7 @@ import ManageCatalog from './pages/admin/ManageCatalog';
 import ManageSettings from './pages/admin/ManageSettings';
 import ManageInstructors from './pages/admin/ManageInstructors';
 import Analytics from './pages/admin/Analytics';
+import StorageManager from './pages/admin/StorageManager';
 
 import { ToastProvider } from './components/Toast';
 import './App.css';
@@ -79,6 +80,7 @@ function App() {
             <Route path="catalog" element={<ManageCatalog />} />
             <Route path="instructors" element={<ManageInstructors />} />
             <Route path="settings" element={<ManageSettings />} />
+            <Route path="storage" element={<StorageManager />} />
           </Route>
         </Route>
       </Routes>

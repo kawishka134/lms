@@ -343,15 +343,18 @@ export default function Dashboard() {
                               const courseGrade = String(course.year || '').toLowerCase();
                               const courseSubject = String(course.subject || '').toLowerCase();
                               
-                              // Grade Match
+                              // Grade Match (Student Profile Grade includes Course Year)
                               const gradeMatch = studentGrade.includes(courseGrade) || studentYear.includes(courseGrade) || courseGrade.includes(studentGrade);
                               
-                              // Subject Match (Profile Subject OR already Enrolled)
+                              // Subject Match (Profile Subject includes Course Subject)
                               const studentProfileSubjects = String(profile.subject || '').toLowerCase();
                               const isProfileSubject = studentProfileSubjects.includes(courseSubject);
+
+                              // IMPORTANT: If they are ALREADY enrolled, ALWAYS show it. 
+                              // Otherwise, only show if Grade Matches AND it's their subject.
                               const isEnrolled = (enrollData || []).some(e => e.course_id === course.id);
 
-                              return gradeMatch && (isProfileSubject || isEnrolled);
+                              return isEnrolled || (gradeMatch && isProfileSubject);
                           });
                           setAvailableCourses(filtered);
                       }
@@ -443,6 +446,33 @@ export default function Dashboard() {
     setIsUploading(true);
     try {
         const { data: { session } } = await supabase.auth.getSession();
+
+        // 1. Image Only Validation
+        if (!selectedFile.type.startsWith('image/')) {
+            throw new Error("⚠️ Invalid File: Please upload an image receipt (JPG/PNG). Videos are not allowed.");
+        }
+
+        // 2. Duplicate Detection (Hashing)
+        const calculateHash = async (file) => {
+            const buffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        const fileHash = await calculateHash(selectedFile);
+
+        // Check for duplicates in enrollments
+        const { data: duplicate } = await supabase
+            .from('enrollments')
+            .select('id, profiles(full_name)')
+            .eq('slip_hash', fileHash)
+            .maybeSingle();
+
+        if (duplicate) {
+            throw new Error(`⚠️ DUPLICATE SLIP: This receipt has already been used by ${duplicate.profiles?.full_name || 'another student'}.`);
+        }
+
         const fileExt = selectedFile.name.split('.').pop();
         const fileName = `slip-${session.user.id}-${selectedCourseId}-${Date.now()}.${fileExt}`;
         
@@ -455,6 +485,7 @@ export default function Dashboard() {
             student_id: session.user.id,
             course_id: selectedCourseId,
             slip_url: data.publicUrl,
+            slip_hash: fileHash,
             status: 'pending'
         }, { onConflict: 'student_id, course_id' });
 
@@ -511,20 +542,45 @@ export default function Dashboard() {
 
     setIsUploading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("User not authenticated.");
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error("User not authenticated.");
 
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `tute_slip-${session.user.id}-${selectedTute.id}-${Date.now()}.${fileExt}`;
-      await supabase.storage.from('tute_slips').upload(fileName, selectedFile);
-      const { data } = supabase.storage.from('tute_slips').getPublicUrl(fileName);
+        // 1. Image Only Validation
+        if (!selectedFile.type.startsWith('image/')) {
+            throw new Error("⚠️ Invalid File: Please upload an image receipt (JPG/PNG). Videos are not allowed.");
+        }
 
-      await supabase.from('tute_enrollments').upsert({
-        student_id: session.user.id,
-        tute_id: selectedTute.id,
-        slip_url: data.publicUrl,
-        status: 'pending'
-      }, { onConflict: 'student_id, tute_id' });
+        // 2. Duplicate Detection
+        const calculateHash = async (file) => {
+            const buffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+        const fileHash = await calculateHash(selectedFile);
+
+        const { data: duplicate } = await supabase
+            .from('tute_enrollments')
+            .select('id, profiles(full_name)')
+            .eq('slip_hash', fileHash)
+            .maybeSingle();
+
+        if (duplicate) {
+            throw new Error(`⚠️ DUPLICATE SLIP: This receipt has already been used by ${duplicate.profiles?.full_name || 'another student'}.`);
+        }
+
+        const fileExt = selectedFile.name.split('.').pop();
+        const fileName = `tute_slip-${session.user.id}-${selectedTute.id}-${Date.now()}.${fileExt}`;
+        await supabase.storage.from('tute_slips').upload(fileName, selectedFile);
+        const { data } = supabase.storage.from('tute_slips').getPublicUrl(fileName);
+
+        await supabase.from('tute_enrollments').upsert({
+          student_id: session.user.id,
+          tute_id: selectedTute.id,
+          slip_url: data.publicUrl,
+          slip_hash: fileHash,
+          status: 'pending'
+        }, { onConflict: 'student_id, tute_id' });
 
       // Refresh tute enrollments
       const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
