@@ -54,7 +54,21 @@ export default function Announcements() {
         }
    };
 
-  useEffect(() => { fetchAnnouncements(); }, []);
+  useEffect(() => { 
+      fetchAnnouncements(); 
+
+      // Real-time Subscription
+      const subscription = supabase
+          .channel('announcements-changes')
+          .on('postgres_changes', { event: '*', table: 'announcements' }, () => {
+              fetchAnnouncements();
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(subscription);
+      };
+  }, []);
 
   const toggleGrade = (grade) => {
       setSelectedGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);

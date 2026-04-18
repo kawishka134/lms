@@ -8,6 +8,9 @@ export default function Schedule() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [schedules, setSchedules] = useState([]);
   const { showToast } = useToast();
+  const adminRole = localStorage.getItem('admin_role');
+  const isSuperAdmin = adminRole === 'super_admin';
+  const currentInstructorId = localStorage.getItem('instructor_id');
 
   const [formData, setFormData] = useState({
       topic: '',
@@ -27,11 +30,31 @@ export default function Schedule() {
   const availableSubjects = ['O/L Commerce', 'A/L Economics', 'A/L Business Studies'];
 
   const fetchSchedules = async () => {
-       const { data } = await supabase.from('schedules').select('*').order('created_at', { ascending: false });
+       let query = supabase.from('schedules').select('*').order('created_at', { ascending: false });
+       
+       if (!isSuperAdmin && currentInstructorId) {
+           query = query.eq('instructor_id', currentInstructorId);
+       }
+       
+       const { data } = await query;
        if(data) setSchedules(data);
   };
 
-  useEffect(() => { fetchSchedules(); }, []);
+  useEffect(() => { 
+      fetchSchedules(); 
+
+      // Real-time Subscription
+      const subscription = supabase
+          .channel('schedules-changes')
+          .on('postgres_changes', { event: '*', table: 'schedules' }, () => {
+              fetchSchedules();
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(subscription);
+      };
+  }, []);
 
   const toggleGrade = (grade) => {
       setSelectedGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);
@@ -72,7 +95,8 @@ export default function Schedule() {
           time: formData.time,
           target_audience: finalAudience,
           zoom_link: formData.zoomLink,
-          is_free: formData.isFree
+          is_free: formData.isFree,
+          instructor_id: currentInstructorId
       }).select();
 
       if(!error) {

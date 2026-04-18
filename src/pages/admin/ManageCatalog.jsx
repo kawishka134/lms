@@ -47,7 +47,13 @@ export default function ManageCatalog() {
     const commonSubjects = ['Accounting', 'Business Studies', 'Economics', 'O/L Commerce'];
 
     const fetchCoursesAndInstructors = async () => {
-        const { data: cData } = await supabase.from('courses').select('*, instructors(name)').order('created_at', { ascending: false });
+        let query = supabase.from('courses').select('*, instructors(name)').order('created_at', { ascending: false });
+        
+        if (!isSuperAdmin && currentInstructorId) {
+            query = query.eq('instructor_id', currentInstructorId);
+        }
+        
+        const { data: cData } = await query;
         if (cData) setCourses(cData);
         
         // Fetch instructors WITH bank details so we can auto-fill
@@ -55,7 +61,21 @@ export default function ManageCatalog() {
         if (iData) setInstructors(iData);
     };
 
-    useEffect(() => { fetchCoursesAndInstructors(); }, []);
+    useEffect(() => { 
+        fetchCoursesAndInstructors(); 
+
+        // Real-time Subscription
+        const subscription = supabase
+            .channel('courses-changes')
+            .on('postgres_changes', { event: '*', table: 'courses' }, () => {
+                fetchCoursesAndInstructors();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(subscription);
+        };
+    }, []);
 
     const lastAutoTitle = useRef('');
     useEffect(() => {

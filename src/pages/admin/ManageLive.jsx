@@ -10,6 +10,9 @@ export default function ManageLive() {
   const [editingId, setEditingId] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
   const { showToast } = useToast();
+  const adminRole = localStorage.getItem('admin_role');
+  const isSuperAdmin = adminRole === 'super_admin';
+  const currentInstructorId = localStorage.getItem('instructor_id');
 
   // Transition Modal States
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -28,11 +31,31 @@ export default function ManageLive() {
   });
 
   const fetchSessions = async () => {
-       const { data } = await supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
+       let query = supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
+       
+       if (!isSuperAdmin && currentInstructorId) {
+           query = query.eq('instructor_id', currentInstructorId);
+       }
+       
+       const { data } = await query;
        if(data) setActiveSessions(data);
   };
 
-  useEffect(() => { fetchSessions(); }, []);
+  useEffect(() => { 
+      fetchSessions(); 
+
+      // Real-time Subscription
+      const subscription = supabase
+          .channel('live-changes')
+          .on('postgres_changes', { event: '*', table: 'live_sessions' }, () => {
+              fetchSessions();
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(subscription);
+      };
+  }, []);
 
   const handleSubmit = async (e) => {
       e.preventDefault();
@@ -44,7 +67,8 @@ export default function ManageLive() {
           date: formData.date || new Date().toISOString().split('T')[0],
           time: formData.time || '00:00',
           zoom_link: formData.zoomLink,
-          youtube_link: formData.youtubeLink
+          youtube_link: formData.youtubeLink,
+          instructor_id: currentInstructorId
       };
 
       if (isEditing) {

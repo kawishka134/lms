@@ -29,29 +29,60 @@ export default function ManageRecordings() {
   const availableSubjects = ['O/L Commerce', 'A/L Economics', 'A/L Business Studies'];
 
   const fetchRecordings = async () => {
-       const { data } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
+       let query = supabase.from('recordings').select('*').order('created_at', { ascending: false });
+       
+       if (!isSuperAdmin && currentInstructorId) {
+           query = query.eq('instructor_id', currentInstructorId);
+       }
+       
+       const { data } = await query;
        if(data) setRecordings(data);
   };
 
-   const fetchRequests = async () => {
-       try {
-           const { data, error } = await supabase
-               .from('recording_access_requests')
-               .select('*, profiles(full_name, phone), recordings(title)')
-               .eq('status', 'pending')
-               .order('requested_at', { ascending: false });
-               
-           if (error) {
-               console.error("Access requests fetch error:", error);
-               return;
-           }
-           if(data) setRequests(data);
-       } catch (err) {
-           console.error("Request fetch failed catch:", err);
-       }
-   };
+    const fetchRequests = async () => {
+        try {
+            let query = supabase
+                .from('recording_access_requests')
+                .select('*, profiles(full_name, phone), recordings(title, instructor_id)')
+                .eq('status', 'pending');
 
-  useEffect(() => { fetchRecordings(); fetchRequests(); }, []);
+            const { data, error } = await query.order('requested_at', { ascending: false });
+                
+            if (error) {
+                console.error("Access requests fetch error:", error);
+                return;
+            }
+            
+            if (data) {
+                // Filter requests based on recording's instructor_id if not super admin
+                const filteredData = isSuperAdmin 
+                    ? data 
+                    : data.filter(req => req.recordings?.instructor_id === currentInstructorId);
+                setRequests(filteredData);
+            }
+        } catch (err) {
+            console.error("Request fetch failed catch:", err);
+        }
+    };
+
+  useEffect(() => { 
+      fetchRecordings(); 
+      fetchRequests(); 
+
+      // Real-time Subscriptions
+      const recSub = supabase.channel('recordings-changes')
+          .on('postgres_changes', { event: '*', table: 'recordings' }, () => fetchRecordings())
+          .subscribe();
+
+      const reqSub = supabase.channel('requests-changes')
+          .on('postgres_changes', { event: '*', table: 'recording_access_requests' }, () => fetchRequests())
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(recSub);
+          supabase.removeChannel(reqSub);
+      };
+  }, []);
 
   const toggleGrade = (grade) => {
       setSelectedGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);

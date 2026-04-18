@@ -34,6 +34,18 @@ export default function ManageTutes() {
     fetchTutes();
     fetchOptions();
     fetchInstructors();
+
+    // Real-time Subscription
+    const subscription = supabase
+        .channel('tutes-changes')
+        .on('postgres_changes', { event: '*', table: 'tutes' }, () => {
+            fetchTutes();
+        })
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(subscription);
+    };
   }, []);
 
   const fetchInstructors = async () => {
@@ -83,7 +95,13 @@ export default function ManageTutes() {
 
   const fetchTutes = async () => {
     setLoading(true);
-    const { data } = await supabase.from('tutes').select('*, instructors(name)').order('created_at', { ascending: false });
+    let query = supabase.from('tutes').select('*, instructors(name)').order('created_at', { ascending: false });
+    
+    if (!isSuperAdmin && currentInstructorId) {
+        query = query.eq('instructor_id', currentInstructorId);
+    }
+    
+    const { data } = await query;
     if (data) setTutes(data);
     
     // Fetch students for gifting

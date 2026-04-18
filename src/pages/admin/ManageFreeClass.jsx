@@ -10,6 +10,9 @@ export default function ManageFreeClass() {
   const [editingId, setEditingId] = useState(null);
   const [freeClasses, setFreeClasses] = useState([]);
   const { showToast } = useToast();
+  const adminRole = localStorage.getItem('admin_role');
+  const isSuperAdmin = adminRole === 'super_admin';
+  const currentInstructorId = localStorage.getItem('instructor_id');
 
   const [formData, setFormData] = useState({
       title: '',
@@ -30,11 +33,31 @@ export default function ManageFreeClass() {
   const availableSubjects = ['O/L Commerce', 'A/L Economics', 'A/L Business Studies'];
 
   const fetchFreeClasses = async () => {
-       const { data } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
+       let query = supabase.from('free_classes').select('*').order('created_at', { ascending: false });
+       
+       if (!isSuperAdmin && currentInstructorId) {
+           query = query.eq('instructor_id', currentInstructorId);
+       }
+       
+       const { data } = await query;
        if(data) setFreeClasses(data);
   };
 
-  useEffect(() => { fetchFreeClasses(); }, []);
+  useEffect(() => { 
+      fetchFreeClasses(); 
+
+      // Real-time Subscription
+      const subscription = supabase
+          .channel('free-changes')
+          .on('postgres_changes', { event: '*', table: 'free_classes' }, () => {
+              fetchFreeClasses();
+          })
+          .subscribe();
+
+      return () => {
+          supabase.removeChannel(subscription);
+      };
+  }, []);
 
   const toggleGrade = (grade) => {
       setSelectedGrades(prev => prev.includes(grade) ? prev.filter(g => g !== grade) : [...prev, grade]);
@@ -72,7 +95,8 @@ export default function ManageFreeClass() {
           time: formData.time,
           is_live: formData.isLive,
           expires_at: formData.expiresAt,
-          target_audience: finalAudience
+          target_audience: finalAudience,
+          instructor_id: currentInstructorId
       };
 
 

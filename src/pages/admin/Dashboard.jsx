@@ -95,6 +95,18 @@ export default function AdminDashboard() {
       }
     };
     fetchStats();
+
+    // Real-time Subscriptions for Dashboard Stats
+    const channels = [
+        supabase.channel('dashboard-enrollments').on('postgres_changes', { event: '*', table: 'enrollments' }, () => fetchStats()).subscribe(),
+        supabase.channel('dashboard-tutes').on('postgres_changes', { event: '*', table: 'tute_enrollments' }, () => fetchStats()).subscribe(),
+        supabase.channel('dashboard-requests').on('postgres_changes', { event: '*', table: 'recording_access_requests' }, () => fetchStats()).subscribe(),
+        supabase.channel('dashboard-payments').on('postgres_changes', { event: '*', table: 'instructor_payments' }, () => fetchStats()).subscribe()
+    ];
+
+    return () => {
+        channels.forEach(ch => supabase.removeChannel(ch));
+    };
   }, [adminRole, instructorId]);
 
   const handleSearch = async (e) => {
