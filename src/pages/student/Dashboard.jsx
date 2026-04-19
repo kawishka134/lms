@@ -209,6 +209,7 @@ export default function Dashboard() {
   const [selectedTute, setSelectedTute] = useState(null);
   const [showTuteModal, setShowTuteModal] = useState(false);
   const [mcqExams, setMcqExams] = useState([]);
+  const [mcqAttempts, setMcqAttempts] = useState([]);
   const [activeMcqExam, setActiveMcqExam] = useState(null);
   const [mcqAnswers, setMcqAnswers] = useState({});
   const [mcqResult, setMcqResult] = useState(null);
@@ -419,6 +420,12 @@ export default function Dashboard() {
                               .eq('is_published', true)
                               .order('created_at', { ascending: false });
                           if (mcqData && isMounted) setMcqExams(mcqData);
+
+                          const { data: attemptData } = await supabase
+                              .from('mcq_attempts')
+                              .select('*')
+                              .eq('student_id', session.user.id);
+                          if (attemptData && isMounted) setMcqAttempts(attemptData);
                       }
 
                       const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
@@ -1224,6 +1231,11 @@ export default function Dashboard() {
                     student_id: session.user.id, exam_id: activeMcqExam.id,
                     student_answers: mcqAnswers, score, completed_at: new Date().toISOString(), is_submitted: true
                 }, { onConflict: 'student_id,exam_id' });
+                
+                // Update local attempts list
+                const { data: newAttempts } = await supabase.from('mcq_attempts').select('*').eq('student_id', session.user.id);
+                if (newAttempts) setMcqAttempts(newAttempts);
+
                 setMcqResult({ score, total: correctAnswers?.length || activeMcqExam.num_questions, review });
                 setActiveMcqExam(null);
             };
@@ -1399,24 +1411,62 @@ export default function Dashboard() {
                             <ClipboardList size={48} style={{ margin: '0 auto 1rem' }} />
                             <p style={{ fontWeight: 700 }}>No MCQ exams available yet.</p>
                         </div>
-                    ) : mcqExams.map(exam => (
-                        <div key={exam.id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', padding: '0.875rem', borderRadius: '14px' }}><ClipboardList size={26} /></div>
-                                <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                    <span>⏱ {exam.time_limit_minutes} min</span>
-                                    <span>📝 {exam.num_questions} Questions</span>
+                    ) : mcqExams.map(exam => {
+                        const attempt = mcqAttempts.find(a => a.exam_id === exam.id);
+                        return (
+                            <div key={exam.id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: attempt ? '2px solid #bbf7d0' : 'none', backgroundColor: attempt ? '#f0fdf4' : 'white' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ backgroundColor: attempt ? '#16a34a' : 'var(--color-primary-light)', color: attempt ? 'white' : 'var(--color-primary)', padding: '0.875rem', borderRadius: '14px' }}>
+                                        {attempt ? <CheckCircle size={26} /> : <ClipboardList size={26} />}
+                                    </div>
+                                    <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                        <span>⏱ {exam.time_limit_minutes} min</span>
+                                        <span>📝 {exam.num_questions} Questions</span>
+                                    </div>
                                 </div>
+                                <div>
+                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.courses?.title}</span>
+                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: '0.3rem 0 0', color: '#111827' }}>{exam.title}</h3>
+                                    {attempt && (
+                                        <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16a34a' }}>Score: {attempt.score} / {exam.num_questions}</span>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 800, backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px' }}>
+                                                {Math.round((attempt.score / exam.num_questions) * 100)}%
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                                
+                                {attempt ? (
+                                    <button 
+                                        onClick={async () => {
+                                            const { data: qData } = await supabase.from('mcq_questions').select('*').eq('exam_id', exam.id).order('question_number');
+                                            const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', exam.id);
+                                            const review = {};
+                                            (correctAnswers || []).forEach(a => {
+                                                const studentAns = attempt.student_answers[a.question_number];
+                                                const isCorrect = studentAns === a.correct_option;
+                                                review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
+                                            });
+                                            setMcqResult({ score: attempt.score, total: exam.num_questions, review });
+                                        }} 
+                                        className="btn btn-outline" 
+                                        style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto', borderColor: '#16a34a', color: '#16a34a' }}
+                                    >
+                                        📄 View Results Review
+                                    </button>
+                                ) : (
+                                    <button 
+                                        onClick={() => { setActiveMcqIdx(0); startMcq(exam); }} 
+                                        className="btn btn-primary" 
+                                        style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto' }}
+                                    >
+                                        🚀 Start Exam
+                                    </button>
+                                )}
                             </div>
-                            <div>
-                                <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.courses?.title}</span>
-                                <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: '0.3rem 0 0', color: '#111827' }}>{exam.title}</h3>
-                            </div>
-                            <button onClick={() => { setActiveMcqIdx(0); startMcq(exam); }} className="btn btn-primary" style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto' }}>
-                                🚀 Start Exam
-                            </button>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             );
         case 'special_announce':
