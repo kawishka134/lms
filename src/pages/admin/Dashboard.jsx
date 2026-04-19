@@ -63,6 +63,7 @@ export default function AdminDashboard() {
             const { count: tc } = await supabase.from('tute_enrollments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
             const { count: vc } = await supabase.from('recording_access_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
             const { count: cc } = await supabase.from('instructor_payments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+            const { count: mc } = await supabase.from('mcq_retake_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
             
             const { data: cd } = await supabase.from('courses').select('title, enrollments!inner (count)').eq('enrollments.status', 'approved');
 
@@ -70,7 +71,7 @@ export default function AdminDashboard() {
             paidStudentsCount = new Set(ps?.map(e => e.student_id)).size;
 
             studentCount = sc || 0;
-            pendingCountValue = (pc || 0) + (tc || 0) + (vc || 0) + (cc || 0);
+            pendingCountValue = (pc || 0) + (tc || 0) + (vc || 0) + (cc || 0) + (mc || 0);
             courseData = cd || [];
         }
 
@@ -101,7 +102,8 @@ export default function AdminDashboard() {
         supabase.channel('dashboard-enrollments').on('postgres_changes', { event: '*', table: 'enrollments' }, () => fetchStats()).subscribe(),
         supabase.channel('dashboard-tutes').on('postgres_changes', { event: '*', table: 'tute_enrollments' }, () => fetchStats()).subscribe(),
         supabase.channel('dashboard-requests').on('postgres_changes', { event: '*', table: 'recording_access_requests' }, () => fetchStats()).subscribe(),
-        supabase.channel('dashboard-payments').on('postgres_changes', { event: '*', table: 'instructor_payments' }, () => fetchStats()).subscribe()
+        supabase.channel('dashboard-payments').on('postgres_changes', { event: '*', table: 'instructor_payments' }, () => fetchStats()).subscribe(),
+        supabase.channel('dashboard-mcq').on('postgres_changes', { event: '*', table: 'mcq_retake_requests' }, () => fetchStats()).subscribe()
     ];
 
     return () => {

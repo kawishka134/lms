@@ -12,10 +12,11 @@ export default function Approvals() {
   const [instructorSlips, setInstructorSlips] = useState([]);
   const [instructorHistory, setInstructorHistory] = useState([]);
   const [videoRequests, setVideoRequests] = useState([]);
+  const [mcqRequests, setMcqRequests] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('students'); // students, videos, tutes, instructors, history
+  const [activeTab, setActiveTab] = useState('students'); // students, videos, tutes, instructors, history, mcq
   const { showToast } = useToast();
 
   const fetchSlips = async () => {
@@ -75,11 +76,19 @@ export default function Approvals() {
         .order('created_at', { ascending: false })
         .limit(20);
 
+    // Fetch MCQ Retake Requests
+    const { data: mReqs, error: errorMReqs } = await supabase
+        .from('mcq_retake_requests')
+        .select(`id, created_at, status, student_id, exam_id, profiles(full_name, phone), mcq_exams(title, instructor_id)`)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
     let finalPending = pending || [];
     let finalApproved = approved || [];
     let finalVReqs = vReqs || [];
     let finalTutes = tutes || [];
     let finalAppTutes = appTutes || [];
+    let finalMcqReqs = mReqs || [];
 
     if (adminRole === 'instructor' && instructorId) {
         finalPending = finalPending.filter(p => p.courses?.instructor_id === instructorId);
@@ -87,11 +96,13 @@ export default function Approvals() {
         finalVReqs = finalVReqs.filter(v => v.recordings?.instructor_id === instructorId);
         finalTutes = finalTutes.filter(t => t.tutes?.instructor_id === instructorId);
         finalAppTutes = finalAppTutes.filter(t => t.tutes?.instructor_id === instructorId);
+        finalMcqReqs = finalMcqReqs.filter(m => m.mcq_exams?.instructor_id === instructorId);
     }
 
     setPendingSlips(finalPending);
     setApprovedSlips(finalApproved);
     setVideoRequests(finalVReqs);
+    setMcqRequests(finalMcqReqs);
     setTuteSlips(finalTutes);
     setApprovedTutes(finalAppTutes);
     setInstructorSlips(instSlips || []);
@@ -101,6 +112,7 @@ export default function Approvals() {
     if (errorVReqs) console.error("Video Requests Error:", errorVReqs);
     if (errorTutes) console.error("Tute Enrollments Error:", errorTutes);
     if (errorInstSlips) console.error("Instructor Slips Error:", errorInstSlips);
+    if (errorMReqs) console.error("MCQ Retake Request Error:", errorMReqs);
     setLoading(false);
   };
 
@@ -111,6 +123,7 @@ export default function Approvals() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchSlips())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchSlips())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'instructor_payments' }, () => fetchSlips())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_retake_requests' }, () => fetchSlips())
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, []);
@@ -177,7 +190,21 @@ export default function Approvals() {
             }
         }
 
-        showToast(`${table === 'recording_access_requests' ? 'Video Access' : 'Payment'} ${newStatus === 'approved' ? 'Approved' : 'Rejected'} successfully!`, 'success');
+        if (table === 'mcq_retake_requests' && newStatus === 'approved') {
+            const target = mcqRequests.find(m => m.id === id);
+            if (target) {
+                // DELETE previous attempt so student can redo
+                await supabase.from('mcq_attempts').delete().eq('student_id', target.student_id).eq('exam_id', target.exam_id);
+                
+                // Notify via SMS
+                if (target.profiles?.phone) {
+                    const message = `Nexus LMS: Sir approved your retake request for MCQ (${target.mcq_exams?.title}). You can log in and redo the exam now. Good luck!`;
+                    await sendSMS(target.profiles.phone, message);
+                }
+            }
+        }
+
+        showToast(`${table === 'recording_access_requests' ? 'Video Access' : table === 'mcq_retake_requests' ? 'MCQ Retake' : 'Payment'} ${newStatus === 'approved' ? 'Approved' : 'Rejected'} successfully!`, 'success');
         fetchSlips();
     } catch (err) {
         showToast("Action failed: " + err.message, 'error');
@@ -605,6 +632,39 @@ export default function Approvals() {
               </table>
           </div>
       )}
+
+            {activeTab === 'mcq' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {filterData(mcqRequests).length > 0 ? filterData(mcqRequests).map(req => (
+                        <div key={req.id} className="card" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+                                <div style={{ backgroundColor: '#fef3c7', color: '#f59e0b', width: '50px', height: '50px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <RotateCcw size={28} />
+                                </div>
+                                <div>
+                                    <h4 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem' }}>{req.profiles?.full_name}</h4>
+                                    <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
+                                        Requesting Retake for: <span style={{ color: 'var(--color-primary)' }}>{req.mcq_exams?.title}</span>
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                        <span>📞 {req.profiles?.phone}</span>
+                                        <span>📅 {new Date(req.created_at).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <button onClick={() => handleAction('mcq_retake_requests', req.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)', padding: '0.75rem 1.25rem' }}>Reject</button>
+                                <button onClick={() => handleAction('mcq_retake_requests', req.id, 'approved')} className="btn btn-primary" style={{ padding: '0.75rem 2rem' }}>Approve Retake</button>
+                            </div>
+                        </div>
+                    )) : (
+                        <div style={{ textAlign: 'center', padding: '5rem', opacity: 0.5 }}>
+                            <RotateCcw size={64} style={{ margin: '0 auto 1.5rem' }} />
+                            <h3 style={{ fontWeight: 800 }}>No pending retake requests</h3>
+                        </div>
+                    )}
+                </div>
+            )}
 
       {activeTab === 'history' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
