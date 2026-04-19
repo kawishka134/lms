@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   BookOpen, Clock, AlertCircle, PlayCircle, Video, FileText, Phone, ShieldCheck,
   CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User, ClipboardList
@@ -300,170 +300,168 @@ export default function Dashboard() {
 
   const fileInputRef = useRef(null);
 
+  const fetchData = useCallback(async () => {
+      try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+             navigate('/login');
+             return;
+          }
+          if (session && session.user) {
+              const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+              if (profile) {
+                  setStudentProfile(profile);
+                  if(profile.nic) setNicNumber(profile.nic);
+
+                  if (profile.last_read_notices_time) {
+                      setLastReadTime(parseInt(profile.last_read_notices_time));
+                      localStorage.setItem('last_read_notices_time', profile.last_read_notices_time.toString());
+                  } else {
+                      setLastReadTime(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
+                  }
+
+                   // 1. Fetch available current enrollments
+                   const { data: enrollData } = await supabase
+                       .from('enrollments')
+                       .select('*, courses(subject)')
+                       .eq('student_id', session.user.id);
+                   
+                   const enrolledSubjects = (enrollData || [])
+                     .filter(e => e.status === 'approved')
+                     .map(e => e.courses?.subject)
+                     .filter(Boolean)
+                     .join(' ');
+
+                   if(enrollData) {
+                       setAllEnrollments(enrollData);
+                       const hasActive = enrollData.some(e => e.status === 'approved' && (!e.expires_at || new Date(e.expires_at) > new Date()));
+                       setEnrollmentStatus(hasActive ? 'approved' : 'not_active');
+                   }
+
+                   // 2. Fetch all courses for the student's grade
+                   const { data: allCourses } = await supabase
+                       .from('courses')
+                       .select('*, instructors(*)');
+                   
+                   if (allCourses) {
+                       const filtered = allCourses.filter(course => {
+                           const studentGrade = String(profile.grade || '').toLowerCase();
+                           const studentYear = String(profile.year || '').toLowerCase();
+                           const courseGrade = String(course.year || '').toLowerCase();
+                           const courseSubject = String(course.subject || '').toLowerCase();
+                           
+                           // Grade Match (Student Profile Grade includes Course Year)
+                           const gradeMatch = studentGrade.includes(courseGrade) || studentYear.includes(courseGrade) || courseGrade.includes(studentGrade);
+                           
+                           // Subject Match (Profile Subject includes Course Subject)
+                           const studentProfileSubjects = String(profile.subject || '').toLowerCase();
+                           const isProfileSubject = studentProfileSubjects.includes(courseSubject);
+
+                           // IMPORTANT: If they are ALREADY enrolled, ALWAYS show it. 
+                           // Otherwise, only show if Grade Matches AND it's their subject.
+                           const isEnrolled = (enrollData || []).some(e => e.course_id === course.id);
+
+                           return isEnrolled || (gradeMatch && isProfileSubject);
+                       });
+                       setAvailableCourses(filtered);
+                   }
+
+                   const isAudienceMatch = (targetAudienceStr, profileData, extraSubjects = '') => {
+                       if (!targetAudienceStr || targetAudienceStr === 'All Students') return true;
+                       if (!profileData) return false;
+                       
+                       const normalizedGrade = String(profileData.grade || '').toLowerCase();
+                       const gradeWithPrefix = normalizedGrade.startsWith('grade') ? normalizedGrade : `grade ${normalizedGrade}`;
+                       
+                       const studentData = `${normalizedGrade} ${gradeWithPrefix} ${profileData.year} ${profileData.subject} ${extraSubjects} ${profileData.medium}`.toLowerCase();
+                       const targets = targetAudienceStr.split(',').map(t => t.trim().toLowerCase());
+                       
+                       return targets.some(target => {
+                           const words = target.split(' ').filter(w => w !== '');
+                           return words.every(word => studentData.includes(word));
+                       });
+                   };
+
+                   // 3. Load other filtered content
+                   const { data: notices } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
+                   if(notices) setAnnouncements(notices.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
+
+                   const { data: timetable } = await supabase.from('schedules').select('*').order('created_at', { ascending: false });
+                   if(timetable) setSchedules(timetable.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
+
+                   const { data: sessions } = await supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
+                   if(sessions) setLiveSessions(sessions);
+
+                   const { data: freeContent } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
+                   if(freeContent) setFreeClasses(freeContent.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
+
+                   const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
+                   if(records) setRecordings(records.filter(r => isAudienceMatch(r.target_audience, profile, enrolledSubjects)));
+
+                   const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
+                   if(recAccess) setRecordingAccess(recAccess);
+
+                   const { data: allDocs } = await supabase.from('tutes').select('*, instructors(*)').order('created_at', { ascending: false });
+                   if(allDocs) {
+                       setTutes(allDocs.filter(d => isAudienceMatch(d.target_audience, profile, enrolledSubjects)));
+                   }
+
+                   const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
+                   if(myTutes) setTuteEnrollments(myTutes);
+
+                   // Fetch MCQ Exams for enrolled courses
+                   const enrolledCourseIds = (enrollData || []).filter(e => e.status === 'approved').map(e => e.course_id);
+                   if (enrolledCourseIds.length > 0) {
+                       const { data: mcqData } = await supabase
+                           .from('mcq_exams')
+                           .select('*, courses(title)')
+                           .in('course_id', enrolledCourseIds)
+                           .eq('is_published', true)
+                           .order('created_at', { ascending: false });
+                       if (mcqData) setMcqExams(mcqData);
+
+                       const { data: attemptData } = await supabase
+                           .from('mcq_attempts')
+                           .select('*')
+                           .eq('student_id', session.user.id);
+                       if (attemptData) setMcqAttempts(attemptData);
+
+                       const { data: retakeData } = await supabase
+                           .from('mcq_retake_requests')
+                           .select('*')
+                           .eq('student_id', session.user.id);
+                       if (retakeData) setMcqRetakeRequests(retakeData);
+                   }
+
+                   const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
+                   if(settings) setInstituteSettings(settings);
+              } else {
+                  // NO PROFILE FOUND IN DB - forcefully log out this invalid session!
+                  await supabase.auth.signOut();
+                  localStorage.removeItem('admin_role');
+                  window.location.href = '/login';
+              }
+          }
+      } catch(e) { console.error(e) }
+  }, [navigate]);
+
   useEffect(() => {
-     let isMounted = true;
-     const fetchData = async () => {
-         try {
-             const { data: { session } } = await supabase.auth.getSession();
-             if (!session && isMounted) {
-                navigate('/login');
-                return;
-             }
-             if (session && session.user && isMounted) {
-                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-                 if (profile) {
-                     setStudentProfile(profile);
-                     if(profile.nic) setNicNumber(profile.nic);
-
-                     if (profile.last_read_notices_time) {
-                         setLastReadTime(parseInt(profile.last_read_notices_time));
-                         localStorage.setItem('last_read_notices_time', profile.last_read_notices_time.toString());
-                     } else {
-                         setLastReadTime(parseInt(localStorage.getItem('last_read_notices_time') || '0'));
-                     }
-
-                      // 1. Fetch available current enrollments
-                      const { data: enrollData } = await supabase
-                          .from('enrollments')
-                          .select('*, courses(subject)')
-                          .eq('student_id', session.user.id);
-                      
-                      const enrolledSubjects = (enrollData || [])
-                        .filter(e => e.status === 'approved')
-                        .map(e => e.courses?.subject)
-                        .filter(Boolean)
-                        .join(' ');
-
-                      if(enrollData && isMounted) {
-                          setAllEnrollments(enrollData);
-                          const hasActive = enrollData.some(e => e.status === 'approved' && (!e.expires_at || new Date(e.expires_at) > new Date()));
-                          setEnrollmentStatus(hasActive ? 'approved' : 'not_active');
-                      }
-
-                      // 2. Fetch all courses for the student's grade
-                      const { data: allCourses } = await supabase
-                          .from('courses')
-                          .select('*, instructors(*)');
-                      
-                      if (allCourses && isMounted) {
-                          const filtered = allCourses.filter(course => {
-                              const studentGrade = String(profile.grade || '').toLowerCase();
-                              const studentYear = String(profile.year || '').toLowerCase();
-                              const courseGrade = String(course.year || '').toLowerCase();
-                              const courseSubject = String(course.subject || '').toLowerCase();
-                              
-                              // Grade Match (Student Profile Grade includes Course Year)
-                              const gradeMatch = studentGrade.includes(courseGrade) || studentYear.includes(courseGrade) || courseGrade.includes(studentGrade);
-                              
-                              // Subject Match (Profile Subject includes Course Subject)
-                              const studentProfileSubjects = String(profile.subject || '').toLowerCase();
-                              const isProfileSubject = studentProfileSubjects.includes(courseSubject);
-
-                              // IMPORTANT: If they are ALREADY enrolled, ALWAYS show it. 
-                              // Otherwise, only show if Grade Matches AND it's their subject.
-                              const isEnrolled = (enrollData || []).some(e => e.course_id === course.id);
-
-                              return isEnrolled || (gradeMatch && isProfileSubject);
-                          });
-                          setAvailableCourses(filtered);
-                      }
-
-                      const isAudienceMatch = (targetAudienceStr, profileData, extraSubjects = '') => {
-                          if (!targetAudienceStr || targetAudienceStr === 'All Students') return true;
-                          if (!profileData) return false;
-                          
-                          const normalizedGrade = String(profileData.grade || '').toLowerCase();
-                          const gradeWithPrefix = normalizedGrade.startsWith('grade') ? normalizedGrade : `grade ${normalizedGrade}`;
-                          
-                          const studentData = `${normalizedGrade} ${gradeWithPrefix} ${profileData.year} ${profileData.subject} ${extraSubjects} ${profileData.medium}`.toLowerCase();
-                          const targets = targetAudienceStr.split(',').map(t => t.trim().toLowerCase());
-                          
-                          return targets.some(target => {
-                              const words = target.split(' ').filter(w => w !== '');
-                              return words.every(word => studentData.includes(word));
-                          });
-                      };
-
-                      // 3. Load other filtered content
-                      const { data: notices } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
-                      if(notices) setAnnouncements(notices.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
-
-                      const { data: timetable } = await supabase.from('schedules').select('*').order('created_at', { ascending: false });
-                      if(timetable) setSchedules(timetable.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
-
-                      const { data: sessions } = await supabase.from('live_sessions').select('*').order('created_at', { ascending: false });
-                      if(sessions) setLiveSessions(sessions);
-
-                      const { data: freeContent } = await supabase.from('free_classes').select('*').order('created_at', { ascending: false });
-                      if(freeContent) setFreeClasses(freeContent.filter(n => isAudienceMatch(n.target_audience, profile, enrolledSubjects)));
-
-                      const { data: records } = await supabase.from('recordings').select('*').order('created_at', { ascending: false });
-                      if(records) setRecordings(records.filter(r => isAudienceMatch(r.target_audience, profile, enrolledSubjects)));
-
-                      const { data: recAccess } = await supabase.from('recording_access_requests').select('*').eq('student_id', session.user.id);
-                      if(recAccess && isMounted) setRecordingAccess(recAccess);
-
-                      const { data: allDocs } = await supabase.from('tutes').select('*, instructors(*)').order('created_at', { ascending: false });
-                      if(allDocs && isMounted) {
-                          setTutes(allDocs.filter(d => isAudienceMatch(d.target_audience, profile, enrolledSubjects)));
-                      }
-
-                      const { data: myTutes } = await supabase.from('tute_enrollments').select('*').eq('student_id', session.user.id);
-                      if(myTutes && isMounted) setTuteEnrollments(myTutes);
-
-                      // Fetch MCQ Exams for enrolled courses
-                      const enrolledCourseIds = (enrollData || []).filter(e => e.status === 'approved').map(e => e.course_id);
-                      if (enrolledCourseIds.length > 0) {
-                          const { data: mcqData } = await supabase
-                              .from('mcq_exams')
-                              .select('*, courses(title)')
-                              .in('course_id', enrolledCourseIds)
-                              .eq('is_published', true)
-                              .order('created_at', { ascending: false });
-                          if (mcqData && isMounted) setMcqExams(mcqData);
-
-                          const { data: attemptData } = await supabase
-                              .from('mcq_attempts')
-                              .select('*')
-                              .eq('student_id', session.user.id);
-                          if (attemptData && isMounted) setMcqAttempts(attemptData);
-
-                          const { data: retakeData } = await supabase
-                              .from('mcq_retake_requests')
-                              .select('*')
-                              .eq('student_id', session.user.id);
-                          if (retakeData && isMounted) setMcqRetakeRequests(retakeData);
-                      }
-
-                      const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
-                      if(settings) setInstituteSettings(settings);
-                 } else {
-                     // NO PROFILE FOUND IN DB - forcefully log out this invalid session!
-                     await supabase.auth.signOut();
-                     localStorage.removeItem('admin_role');
-                     if (isMounted) {
-                         window.location.href = '/login';
-                     }
-                 }
-             }
-         } catch(e) { console.error(e) }
-     };
-     fetchData();
-      const channel = supabase.channel('dashboard_sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'schedules' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'free_classes' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'recordings' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tutes' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, () => fetchData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_retake_requests' }, () => fetchData())
-        .subscribe();
-      return () => { isMounted = false; supabase.removeChannel(channel); }
-  }, [studentProfile?.id]);
+      fetchData();
+       const channel = supabase.channel('dashboard_sync')
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'schedules' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'live_sessions' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'free_classes' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'recordings' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'tutes' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, () => fetchData())
+         .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_retake_requests' }, () => fetchData())
+         .subscribe();
+       return () => { supabase.removeChannel(channel); }
+  }, [fetchData]);
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
@@ -1490,28 +1488,42 @@ export default function Dashboard() {
                                             📄 View Results Review
                                         </button>
                                         
-                                        {retakeReq ? (
+                                        {retakeReq && retakeReq.status !== 'rejected' ? (
                                             <div style={{ padding: '0.75rem', borderRadius: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>
                                                 {retakeReq.status === 'pending' ? '⏳ Retake Request Pending' : '✓ Request Handled'}
                                             </div>
                                         ) : (
-                                            <button 
-                                                onClick={async () => {
-                                                    if (window.confirm('Request instructor to let you redo this exam?')) {
-                                                        const { data: { session } } = await supabase.auth.getSession();
-                                                        await supabase.from('mcq_retake_requests').insert({
-                                                            student_id: session.user.id,
-                                                            exam_id: exam.id,
-                                                            status: 'pending'
-                                                        });
-                                                        showGlobalToast('Request sent to instructor!', 'success');
-                                                    }
-                                                }}
-                                                className="btn btn-outline"
-                                                style={{ width: '100%', padding: '0.6rem', fontSize: '0.8rem', borderRadius: '10px', borderColor: '#94a3b8', color: '#64748b' }}
-                                            >
-                                                🔄 Request Retake
-                                            </button>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                {retakeReq?.status === 'rejected' && (
+                                                    <div style={{ fontSize: '0.7rem', color: '#ef4444', fontWeight: 800, textAlign: 'center' }}>⚠️ Previous request was rejected. Try again?</div>
+                                                )}
+                                                <button 
+                                                    onClick={async () => {
+                                                        if (window.confirm('Request instructor to let you redo this exam?')) {
+                                                            const { data: { session } } = await supabase.auth.getSession();
+                                                            
+                                                            // Mandatory delete before insert to be 100% sure and atomic
+                                                            await supabase.from('mcq_retake_requests').delete().eq('student_id', session.user.id).eq('exam_id', exam.id);
+                                                            const { error } = await supabase.from('mcq_retake_requests').insert({
+                                                                student_id: session.user.id,
+                                                                exam_id: exam.id,
+                                                                status: 'pending'
+                                                            });
+
+                                                            if (!error) {
+                                                                showGlobalToast('Request sent to instructor!', 'success');
+                                                                fetchData(); // Instant Refresh
+                                                            } else {
+                                                                showGlobalToast(error.message, 'error');
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="btn btn-outline"
+                                                    style={{ width: '100%', padding: '0.6rem', fontSize: '0.8rem', borderRadius: '10px', borderColor: '#94a3b8', color: '#64748b' }}
+                                                >
+                                                    {retakeReq?.status === 'rejected' ? '🔄 Re-request Retake' : '🔄 Request Retake'}
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                 )}

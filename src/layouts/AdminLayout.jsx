@@ -11,6 +11,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const [profileName, setProfileName] = useState('Nexus Admin');
   const [notifications, setNotifications] = useState({ approvals: 0, payments: 0, recordings: 0, tutes: 0, commissions: 0, mcq: 0 });
+  const [hideMcqBadge, setHideMcqBadge] = useState(false);
 
   const adminRole = localStorage.getItem('admin_role');
   const instructorId = localStorage.getItem('instructor_id');
@@ -88,6 +89,17 @@ export default function AdminLayout() {
     return () => supabase.removeChannel(channel);
   }, [adminRole, instructorId, isSuperAdmin]);
 
+  // Temporary hide MCQ badge after 5s on page
+  useEffect(() => {
+    let timer;
+    if (location.pathname === '/admin/mcq' && notifications.mcq > 0) {
+      timer = setTimeout(() => setHideMcqBadge(true), 5000);
+    } else if (location.pathname !== '/admin/mcq') {
+      setHideMcqBadge(false);
+    }
+    return () => clearTimeout(timer);
+  }, [location.pathname, notifications.mcq]);
+
   const handleLogout = async () => {
        localStorage.removeItem('admin_role');
        localStorage.removeItem('instructor_id');
@@ -97,7 +109,7 @@ export default function AdminLayout() {
 
   let sidebarLinks = [
     { name: 'Overview', path: '/admin/dashboard', icon: <LayoutDashboard size={18} /> },
-    { name: 'MCQ Exams', path: '/admin/mcq', icon: <ClipboardList size={18} />, badge: notifications.mcq },
+    { name: 'MCQ Exams', path: '/admin/mcq', icon: <ClipboardList size={18} />, badge: hideMcqBadge ? 0 : notifications.mcq },
     { name: 'Finance & Analytics', path: '/admin/analytics', icon: <PieChart size={18} /> },
     { name: 'Approvals', path: '/admin/approvals', icon: <CheckSquare size={18} />, badge: notifications.approvals },
     { name: 'Monthly Payments', path: '/admin/payments', icon: <CreditCard size={18} />, badge: notifications.payments },

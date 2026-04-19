@@ -82,8 +82,8 @@ export default function ManageMCQ() {
                 await supabase.from('mcq_retake_requests').update({ status }).eq('id', id);
                 showToast("Retake access granted!", 'success');
             } else {
-                // If rejected, delete the request record so the student can request again
-                await supabase.from('mcq_retake_requests').delete().eq('id', id);
+                // If rejected, set status to rejected. Dashboard will show request button again.
+                await supabase.from('mcq_retake_requests').update({ status: 'rejected' }).eq('id', id);
                 showToast("Request rejected. Student can now request again.", 'info');
             }
             fetchRetakeRequests();
