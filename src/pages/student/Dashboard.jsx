@@ -210,6 +210,7 @@ export default function Dashboard() {
   const [showTuteModal, setShowTuteModal] = useState(false);
   const [mcqExams, setMcqExams] = useState([]);
   const [mcqAttempts, setMcqAttempts] = useState([]);
+  const [mcqRetakeRequests, setMcqRetakeRequests] = useState([]);
   const [activeMcqExam, setActiveMcqExam] = useState(null);
   const [mcqAnswers, setMcqAnswers] = useState({});
   const [mcqResult, setMcqResult] = useState(null);
@@ -426,6 +427,12 @@ export default function Dashboard() {
                               .select('*')
                               .eq('student_id', session.user.id);
                           if (attemptData && isMounted) setMcqAttempts(attemptData);
+
+                          const { data: retakeData } = await supabase
+                              .from('mcq_retake_requests')
+                              .select('*')
+                              .eq('student_id', session.user.id);
+                          if (retakeData && isMounted) setMcqRetakeRequests(retakeData);
                       }
 
                       const { data: settings } = await supabase.from('site_settings').select('*').eq('id', 'global').maybeSingle();
@@ -1413,6 +1420,12 @@ export default function Dashboard() {
                         </div>
                     ) : mcqExams.map(exam => {
                         const attempt = mcqAttempts.find(a => a.exam_id === exam.id);
+                        const retakeReq = mcqRetakeRequests.find(r => r.exam_id === exam.id);
+                        
+                        // If instructor approved a retake, we should act as if there is no attempt
+                        const isRetakeApproved = retakeReq && retakeReq.status === 'approved';
+                        const showStart = !attempt || isRetakeApproved;
+
                         return (
                             <div key={exam.id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: attempt ? '2px solid #bbf7d0' : 'none', backgroundColor: attempt ? '#f0fdf4' : 'white' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1427,7 +1440,7 @@ export default function Dashboard() {
                                 <div>
                                     <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.courses?.title}</span>
                                     <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: '0.3rem 0 0', color: '#111827' }}>{exam.title}</h3>
-                                    {attempt && (
+                                    {attempt && !isRetakeApproved && (
                                         <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                             <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16a34a' }}>Score: {attempt.score} / {exam.num_questions}</span>
                                             <span style={{ fontSize: '0.75rem', fontWeight: 800, backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px' }}>
@@ -1435,27 +1448,12 @@ export default function Dashboard() {
                                             </span>
                                         </div>
                                     )}
+                                    {isRetakeApproved && (
+                                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#16a34a', fontWeight: 800 }}>🔓 Instructor reset your attempt. You can redo the exam now.</div>
+                                    )}
                                 </div>
                                 
-                                {attempt ? (
-                                    <button 
-                                        onClick={async () => {
-                                            const { data: qData } = await supabase.from('mcq_questions').select('*').eq('exam_id', exam.id).order('question_number');
-                                            const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', exam.id);
-                                            const review = {};
-                                            (correctAnswers || []).forEach(a => {
-                                                const studentAns = attempt.student_answers[a.question_number];
-                                                const isCorrect = studentAns === a.correct_option;
-                                                review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
-                                            });
-                                            setMcqResult({ score: attempt.score, total: exam.num_questions, review });
-                                        }} 
-                                        className="btn btn-outline" 
-                                        style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto', borderColor: '#16a34a', color: '#16a34a' }}
-                                    >
-                                        📄 View Results Review
-                                    </button>
-                                ) : (
+                                {showStart ? (
                                     <button 
                                         onClick={() => { setActiveMcqIdx(0); startMcq(exam); }} 
                                         className="btn btn-primary" 
@@ -1463,6 +1461,51 @@ export default function Dashboard() {
                                     >
                                         🚀 Start Exam
                                     </button>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto' }}>
+                                        <button 
+                                            onClick={async () => {
+                                                const { data: qData } = await supabase.from('mcq_questions').select('*').eq('exam_id', exam.id).order('question_number');
+                                                const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', exam.id);
+                                                const review = {};
+                                                (correctAnswers || []).forEach(a => {
+                                                    const studentAns = attempt.student_answers[a.question_number];
+                                                    const isCorrect = studentAns === a.correct_option;
+                                                    review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
+                                                });
+                                                setMcqResult({ score: attempt.score, total: exam.num_questions, review });
+                                            }} 
+                                            className="btn btn-outline" 
+                                            style={{ width: '100%', padding: '0.875rem', fontSize: '0.9rem', borderRadius: '12px', borderColor: '#16a34a', color: '#16a34a' }}
+                                        >
+                                            📄 View Results Review
+                                        </button>
+                                        
+                                        {retakeReq ? (
+                                            <div style={{ padding: '0.75rem', borderRadius: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.8rem', fontWeight: 700, color: '#64748b' }}>
+                                                {retakeReq.status === 'pending' ? '⏳ Retake Request Pending' : '✓ Request Handled'}
+                                            </div>
+                                        ) : (
+                                            <button 
+                                                onClick={async () => {
+                                                    if (window.confirm('Request instructor to let you redo this exam?')) {
+                                                        const { data: { session } } = await supabase.auth.getSession();
+                                                        await supabase.from('mcq_retake_requests').insert({
+                                                            student_id: session.user.id,
+                                                            exam_id: exam.id,
+                                                            status: 'pending'
+                                                        });
+                                                        showGlobalToast('Request sent to instructor!', 'success');
+                                                        window.location.reload();
+                                                    }
+                                                }}
+                                                className="btn btn-outline"
+                                                style={{ width: '100%', padding: '0.6rem', fontSize: '0.8rem', borderRadius: '10px', borderColor: '#94a3b8', color: '#64748b' }}
+                                            >
+                                                🔄 Request Retake
+                                            </button>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         );
