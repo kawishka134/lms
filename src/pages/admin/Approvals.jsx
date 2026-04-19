@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Search, FileText, RotateCcw, ShoppingBag, Users, GraduationCap, History, DollarSign, Video, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, XCircle, Search, FileText, ShoppingBag, Users, GraduationCap, History, DollarSign, Video, AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { sendSMS } from '../../utils/smsGateway';
@@ -12,17 +12,16 @@ export default function Approvals() {
   const [instructorSlips, setInstructorSlips] = useState([]);
   const [instructorHistory, setInstructorHistory] = useState([]);
   const [videoRequests, setVideoRequests] = useState([]);
-  const [mcqRequests, setMcqRequests] = useState([]);
   const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('students'); // students, videos, tutes, instructors, history, mcq
+  const [activeTab, setActiveTab] = useState('students'); // students, videos, tutes, instructors, history
   const { showToast } = useToast();
+  const adminRole = localStorage.getItem('admin_role');
+  const instructorId = localStorage.getItem('instructor_id');
 
   const fetchSlips = async () => {
     setLoading(true);
-    const adminRole = localStorage.getItem('admin_role');
-    const instructorId = localStorage.getItem('instructor_id');
 
     // Fetch Recording Access Requests
     const { data: vReqs, error: errorVReqs } = await supabase
@@ -77,11 +76,16 @@ export default function Approvals() {
         .limit(20);
 
     // Fetch MCQ Retake Requests
-    const { data: mReqs, error: errorMReqs } = await supabase
+    let mcqQuery = supabase
         .from('mcq_retake_requests')
-        .select(`id, created_at, status, student_id, exam_id, profiles(full_name, phone), mcq_exams(title, instructor_id)`)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
+        .select(`*, profiles(full_name, phone), mcq_exams!inner(title, instructor_id)`)
+        .eq('status', 'pending');
+
+    if (adminRole === 'instructor' && instructorId) {
+        mcqQuery = mcqQuery.eq('mcq_exams.instructor_id', instructorId);
+    }
+    
+    const { data: mReqs, error: errorMReqs } = await mcqQuery.order('created_at', { ascending: false });
 
     let finalPending = pending || [];
     let finalApproved = approved || [];
@@ -96,13 +100,11 @@ export default function Approvals() {
         finalVReqs = finalVReqs.filter(v => v.recordings?.instructor_id === instructorId);
         finalTutes = finalTutes.filter(t => t.tutes?.instructor_id === instructorId);
         finalAppTutes = finalAppTutes.filter(t => t.tutes?.instructor_id === instructorId);
-        finalMcqReqs = finalMcqReqs.filter(m => m.mcq_exams?.instructor_id === instructorId);
     }
 
     setPendingSlips(finalPending);
     setApprovedSlips(finalApproved);
     setVideoRequests(finalVReqs);
-    setMcqRequests(finalMcqReqs);
     setTuteSlips(finalTutes);
     setApprovedTutes(finalAppTutes);
     setInstructorSlips(instSlips || []);
@@ -112,7 +114,9 @@ export default function Approvals() {
     if (errorVReqs) console.error("Video Requests Error:", errorVReqs);
     if (errorTutes) console.error("Tute Enrollments Error:", errorTutes);
     if (errorInstSlips) console.error("Instructor Slips Error:", errorInstSlips);
-    if (errorMReqs) console.error("MCQ Retake Request Error:", errorMReqs);
+    if (errorMReqs) {
+        console.error("MCQ Retake Request Error Details:", errorMReqs);
+    }
     setLoading(false);
   };
 
@@ -226,7 +230,8 @@ export default function Approvals() {
           (s.profiles?.phone || '').includes(query) || 
           (s.recordings?.title?.toLowerCase() || '').includes(query) ||
           (s.courses?.title?.toLowerCase() || '').includes(query) ||
-          (s.tutes?.title?.toLowerCase() || '').includes(query)
+          (s.tutes?.title?.toLowerCase() || '').includes(query) ||
+          (s.mcq_exams?.title?.toLowerCase() || '').includes(query)
       );
   };
 
@@ -458,8 +463,8 @@ export default function Approvals() {
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-surface-border)', padding: '6px', borderRadius: '14px', display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <TabButton id="students" label="Monthly" icon={GraduationCap} color="#f43f5e" count={pendingSlips.length} />
               <TabButton id="videos" label="Video Access" icon={Video} color="#0284c7" count={videoRequests.length} />
-                    <TabButton id="instructors" label="Commissions" icon={DollarSign} color="#10b981" count={instructorSlips.length} />
-                    <TabButton id="tutes" label="Tutes" icon={ShoppingBag} color="#8b5cf6" count={tuteSlips.length} />
+              {adminRole === 'super_admin' && <TabButton id="instructors" label="Commissions" icon={DollarSign} color="#10b981" count={instructorSlips.length} />}
+              <TabButton id="tutes" label="Tutes" icon={ShoppingBag} color="#8b5cf6" count={tuteSlips.length} />
               <TabButton id="history" label="History" icon={History} color="#64748b" />
           </div>
       </div>
@@ -633,38 +638,8 @@ export default function Approvals() {
           </div>
       )}
 
-            {activeTab === 'mcq' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {filterData(mcqRequests).length > 0 ? filterData(mcqRequests).map(req => (
-                        <div key={req.id} className="card" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-                                <div style={{ backgroundColor: '#fef3c7', color: '#f59e0b', width: '50px', height: '50px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <RotateCcw size={28} />
-                                </div>
-                                <div>
-                                    <h4 style={{ margin: 0, fontWeight: 900, fontSize: '1.1rem' }}>{req.profiles?.full_name}</h4>
-                                    <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: 'var(--color-text-muted)', fontWeight: 700 }}>
-                                        Requesting Retake for: <span style={{ color: 'var(--color-primary)' }}>{req.mcq_exams?.title}</span>
-                                    </p>
-                                    <div style={{ display: 'flex', gap: '1rem', marginTop: '4px', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                        <span>📞 {req.profiles?.phone}</span>
-                                        <span>📅 {new Date(req.created_at).toLocaleString()}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button onClick={() => handleAction('mcq_retake_requests', req.id, 'rejected')} className="btn btn-outline" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)', padding: '0.75rem 1.25rem' }}>Reject</button>
-                                <button onClick={() => handleAction('mcq_retake_requests', req.id, 'approved')} className="btn btn-primary" style={{ padding: '0.75rem 2rem' }}>Approve Retake</button>
-                            </div>
-                        </div>
-                    )) : (
-                        <div style={{ textAlign: 'center', padding: '5rem', opacity: 0.5 }}>
-                            <RotateCcw size={64} style={{ margin: '0 auto 1.5rem' }} />
-                            <h3 style={{ fontWeight: 800 }}>No pending retake requests</h3>
-                        </div>
-                    )}
-                </div>
-            )}
+            {/* MCQ Retakes Tab Removed as per user request (moved to Manage MCQ) */}
+
 
       {activeTab === 'history' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>

@@ -459,6 +459,8 @@ export default function Dashboard() {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'recording_access_requests' }, () => fetchData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tute_enrollments' }, () => fetchData())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'tutes' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_attempts' }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'mcq_retake_requests' }, () => fetchData())
         .subscribe();
       return () => { isMounted = false; supabase.removeChannel(channel); }
   }, [studentProfile?.id]);
@@ -1496,7 +1498,6 @@ export default function Dashboard() {
                                                             status: 'pending'
                                                         });
                                                         showGlobalToast('Request sent to instructor!', 'success');
-                                                        window.location.reload();
                                                     }
                                                 }}
                                                 className="btn btn-outline"

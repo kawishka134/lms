@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Trash2, Edit2, Save, Clock, HelpCircle, Eye, EyeOff, FileUp, Zap, CheckCircle, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
+import { FileText, Plus, Trash2, Edit2, Save, Clock, HelpCircle, Eye, EyeOff, FileUp, Zap, CheckCircle, ChevronRight, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
@@ -37,7 +37,57 @@ export default function ManageMCQ() {
     const isSuperAdmin = adminRole === 'super_admin';
     const currentInstructorId = localStorage.getItem('instructor_id');
 
-    useEffect(() => { fetchExams(); fetchCourses(); }, []);
+    const [retakeRequests, setRetakeRequests] = useState([]);
+    const [loadingRequests, setLoadingRequests] = useState(false);
+
+    useEffect(() => { fetchExams(); fetchCourses(); fetchRetakeRequests(); }, []);
+
+    const fetchRetakeRequests = async () => {
+        setLoadingRequests(true);
+        try {
+            const { data: rawReqs, error } = await supabase
+                .from('mcq_retake_requests')
+                .select('*')
+                .eq('status', 'pending');
+            
+            if (error) throw error;
+            if (!rawReqs) return;
+
+            // Fetch details individually to guarantee visibility
+            const enriched = await Promise.all(rawReqs.map(async (req) => {
+                const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', req.student_id).single();
+                const { data: exam } = await supabase.from('mcq_exams').select('title, instructor_id').eq('id', req.exam_id).single();
+                return { ...req, profiles: profile, mcq_exams: exam };
+            }));
+
+            // Filter for instructor locally
+            let final = enriched;
+            if (!isSuperAdmin && currentInstructorId) {
+                final = enriched.filter(r => r.mcq_exams?.instructor_id === currentInstructorId);
+            }
+            setRetakeRequests(final);
+        } catch (err) { console.error("Enrichment Error:", err); }
+        setLoadingRequests(false);
+    };
+
+    const handleRequestAction = async (id, status) => {
+        try {
+            const target = retakeRequests.find(r => r.id === id);
+            if (!target) return;
+
+            const { error } = await supabase.from('mcq_retake_requests').update({ status }).eq('id', id);
+            if (error) throw error;
+
+            if (status === 'approved') {
+                // Delete previous attempts
+                await supabase.from('mcq_attempts').delete().eq('student_id', target.student_id).eq('exam_id', target.exam_id);
+                showToast("Retake access granted!", 'success');
+            } else {
+                showToast("Request rejected.", 'info');
+            }
+            fetchRetakeRequests();
+        } catch (err) { showToast(err.message, 'error'); }
+    };
 
     const fetchExams = async () => {
         let query = supabase.from('mcq_exams').select('*, courses(id, title)').order('created_at', { ascending: false });
@@ -305,6 +355,35 @@ export default function ManageMCQ() {
                     <button onClick={() => setActiveTab('add')} className={`btn ${activeTab === 'add' ? 'btn-primary' : 'btn-outline'}`}><Plus size={18} /> New Exam</button>
                 </div>
             </div>
+            {/* Pending Requests Section */}
+            {retakeRequests.length > 0 && (
+                <div style={{ backgroundColor: '#fff7ed', border: '2px solid #fdba74', borderRadius: '20px', padding: '1.5rem', marginBottom: '2.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.25rem' }}>
+                        <RotateCcw size={22} style={{ color: '#ea580c' }} />
+                        <h2 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#9a3412', margin: 0 }}>Pending Retake Requests</h2>
+                        <span style={{ backgroundColor: '#ea580c', color: 'white', fontSize: '0.75rem', fontWeight: 800, padding: '2px 10px', borderRadius: '20px' }}>{retakeRequests.length}</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+                        {retakeRequests.map(req => (
+                            <div key={req.id} style={{ backgroundColor: 'white', padding: '1.25rem', borderRadius: '16px', border: '1px solid #fed7aa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>{req.profiles?.full_name || `Student: ${req.student_id?.slice(0,8)}...`}</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#ea580c', fontWeight: 800 }}>{req.mcq_exams?.title || `Exam: ${req.exam_id?.slice(0,8)}...`}</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                        <span>📞 {req.profiles?.phone || 'No Contact'}</span>
+                                        <span style={{ opacity: 0.5 }}>|</span>
+                                        <span>📅 {new Date(req.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <button onClick={() => handleRequestAction(req.id, 'rejected')} className="btn btn-outline" style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', color: '#ef4444' }}>Reject</button>
+                                    <button onClick={() => handleRequestAction(req.id, 'approved')} className="btn btn-primary" style={{ padding: '0.4rem 1rem', fontSize: '0.75rem', backgroundColor: '#ea580c', border: 'none' }}>Approve</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {activeTab === 'list' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '1.5rem' }}>
