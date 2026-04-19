@@ -1681,6 +1681,7 @@ export default function Dashboard() {
               { id: 'live_today', label: 'Live', icon: <Clock size={20} /> },
               { id: 'class_schedule', label: 'Schedule', icon: <Calendar size={20} /> },
               { id: 'tute_pdf', label: 'Tutes', icon: <FileText size={20} /> },
+              { id: 'mcq_exams', label: 'MCQ', icon: <ClipboardList size={20} /> },
               { id: 'special_announce', label: 'Notices', icon: <Megaphone size={20} /> },
               { id: 'about_me', label: 'Me', icon: <UserCircle size={20} /> }
           ].map(s => (
