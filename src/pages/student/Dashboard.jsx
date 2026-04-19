@@ -1457,7 +1457,14 @@ export default function Dashboard() {
                                 
                                 {showStart ? (
                                     <button 
-                                        onClick={() => { setActiveMcqIdx(0); startMcq(exam); }} 
+                                        onClick={async () => { 
+                                            // If it was a retake, clear the request record now that they've started
+                                            if (isRetakeApproved) {
+                                                await supabase.from('mcq_retake_requests').delete().eq('id', retakeReq.id);
+                                            }
+                                            setActiveMcqIdx(0); 
+                                            startMcq(exam); 
+                                        }} 
                                         className="btn btn-primary" 
                                         style={{ width: '100%', padding: '0.875rem', fontSize: '1rem', borderRadius: '12px', marginTop: 'auto' }}
                                     >

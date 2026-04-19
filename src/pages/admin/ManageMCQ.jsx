@@ -75,15 +75,16 @@ export default function ManageMCQ() {
             const target = retakeRequests.find(r => r.id === id);
             if (!target) return;
 
-            const { error } = await supabase.from('mcq_retake_requests').update({ status }).eq('id', id);
-            if (error) throw error;
-
             if (status === 'approved') {
-                // Delete previous attempts
+                // Delete previous attempts so hasAttempt becomes false
                 await supabase.from('mcq_attempts').delete().eq('student_id', target.student_id).eq('exam_id', target.exam_id);
+                // Also update status to approved
+                await supabase.from('mcq_retake_requests').update({ status }).eq('id', id);
                 showToast("Retake access granted!", 'success');
             } else {
-                showToast("Request rejected.", 'info');
+                // If rejected, delete the request record so the student can request again
+                await supabase.from('mcq_retake_requests').delete().eq('id', id);
+                showToast("Request rejected. Student can now request again.", 'info');
             }
             fetchRetakeRequests();
         } catch (err) { showToast(err.message, 'error'); }
