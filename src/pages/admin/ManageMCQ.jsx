@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { FileText, Plus, Trash2, Edit2, Save, Clock, HelpCircle, Eye, EyeOff, FileUp, Zap, CheckCircle, ChevronRight, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import Tesseract from 'tesseract.js';
 
 // Set worker for pdfjs
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/legacy/build/pdf.worker.min.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export default function ManageMCQ() {
     const { showToast } = useToast();
