@@ -1,0 +1,3 @@
+ALTER TABLE instructor_payments ADD COLUMN IF NOT EXISTS amount NUMERIC DEFAULT 0;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS promo_video_url TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS free_lesson_url TEXT;

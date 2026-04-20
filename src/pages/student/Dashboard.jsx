@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   BookOpen, Clock, AlertCircle, PlayCircle, Video, FileText, Phone, ShieldCheck,
-  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User, ClipboardList
+  CreditCard, Calendar, Megaphone, UserCircle, UploadCloud, X, CheckCircle, Youtube, Search, MapPin, School, GraduationCap, LogOut, Lock, Sparkles, Download, Mail, Bell, User, ClipboardList, Zap, HelpCircle
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router-dom';
@@ -1223,28 +1223,50 @@ export default function Dashboard() {
             // --- Helpers defined inside case ---
             const submitMcq = async () => {
                 if (!activeMcqExam) return;
-                clearInterval(mcqTimerRef.current);
-                const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', activeMcqExam.id);
-                let score = 0;
-                const review = {};
-                (correctAnswers || []).forEach(a => {
-                    const studentAns = mcqAnswers[a.question_number];
-                    const isCorrect = studentAns === a.correct_option;
-                    if (isCorrect) score++;
-                    review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
-                });
-                const { data: { session } } = await supabase.auth.getSession();
-                await supabase.from('mcq_attempts').upsert({
-                    student_id: session.user.id, exam_id: activeMcqExam.id,
-                    student_answers: mcqAnswers, score, completed_at: new Date().toISOString(), is_submitted: true
-                }, { onConflict: 'student_id,exam_id' });
-                
-                // Update local attempts list
-                const { data: newAttempts } = await supabase.from('mcq_attempts').select('*').eq('student_id', session.user.id);
-                if (newAttempts) setMcqAttempts(newAttempts);
+                try {
+                    clearInterval(mcqTimerRef.current);
+                    const { data: correctAnswers } = await supabase.from('mcq_answers').select('*').eq('exam_id', activeMcqExam.id);
+                    let score = 0;
+                    const review = {};
+                    (correctAnswers || []).forEach(a => {
+                        const studentAns = mcqAnswers[a.question_number];
+                        const isCorrect = studentAns === a.correct_option;
+                        if (isCorrect) score++;
+                        review[a.question_number] = { correct: a.correct_option, student: studentAns, isCorrect };
+                    });
 
-                setMcqResult({ score, total: correctAnswers?.length || activeMcqExam.num_questions, review });
-                setActiveMcqExam(null);
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session) {
+                        alert("Session expired. Please login again.");
+                        return;
+                    }
+
+                    const totalQuestions = correctAnswers?.length || activeMcqExam.num_questions;
+
+                    const { error: upsertErr } = await supabase.from('mcq_attempts').upsert({
+                        student_id: session.user.id, 
+                        exam_id: activeMcqExam.id,
+                        student_answers: mcqAnswers, 
+                        score, 
+                        completed_at: new Date().toISOString(), 
+                        is_submitted: true
+                    }, { onConflict: 'student_id,exam_id' });
+
+                    if (upsertErr) throw upsertErr;
+
+                    // Update local attempts list
+                    const { data: newAttempts } = await supabase.from('mcq_attempts').select('*').eq('student_id', session.user.id);
+                    if (newAttempts) setMcqAttempts(newAttempts);
+
+                    showGlobalToast(`Exam submitted! Score: ${score} / ${totalQuestions}`, 'success');
+                    setMcqResult({ score, total: totalQuestions, review });
+                    setActiveMcqExam(null);
+                    setMcqAnswers({});
+                    fetchData(); // Sync everything
+                } catch (err) {
+                    console.error("MCQ Submission Failed:", err);
+                    alert("Submission Failed: " + err.message);
+                }
             };
 
             const startMcq = async (exam) => {
@@ -1427,29 +1449,75 @@ export default function Dashboard() {
                         const showStart = !attempt || isRetakeApproved;
 
                         return (
-                            <div key={exam.id} className="card" style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '1.25rem', border: attempt ? '2px solid #bbf7d0' : 'none', backgroundColor: attempt ? '#f0fdf4' : 'white' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div style={{ backgroundColor: attempt ? '#16a34a' : 'var(--color-primary-light)', color: attempt ? 'white' : 'var(--color-primary)', padding: '0.875rem', borderRadius: '14px' }}>
-                                        {attempt ? <CheckCircle size={26} /> : <ClipboardList size={26} />}
+                            <div key={exam.id} className="card glass-premium" style={{ 
+                                padding: '2rem', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                gap: '1.5rem', 
+                                border: attempt ? '2px solid #bbf7d0' : '1px solid #f1f5f9', 
+                                backgroundColor: attempt ? '#f0fdf4' : 'white',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                transition: 'all 0.3s ease'
+                            }}>
+                                {attempt && !isRetakeApproved && (
+                                    <div style={{ position: 'absolute', top: '1rem', right: '-2.5rem', background: '#16a34a', color: 'white', padding: '0.25rem 3rem', transform: 'rotate(45deg)', fontSize: '0.7rem', fontWeight: 900, boxShadow: '0 2px 10px rgba(22,163,74,0.3)' }}>
+                                        COMPLETED
                                     </div>
-                                    <div style={{ textAlign: 'right', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 700, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                        <span>⏱ {exam.time_limit_minutes} min</span>
-                                        <span>📝 {exam.num_questions} Questions</span>
+                                )}
+
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ 
+                                        backgroundColor: attempt ? 'rgba(22, 163, 74, 0.1)' : 'var(--color-primary-light)', 
+                                        color: attempt ? '#16a34a' : 'var(--color-primary)', 
+                                        width: '56px', 
+                                        height: '56px', 
+                                        borderRadius: '16px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        boxShadow: attempt ? 'none' : '0 10px 20px rgba(139, 92, 246, 0.1)'
+                                    }}>
+                                        {attempt ? <CheckCircle size={32} /> : <ClipboardList size={32} />}
+                                    </div>
+                                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                            <Clock size={12} /> {exam.time_limit_minutes} Min
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                            <HelpCircle size={12} /> {exam.num_questions} Qs
+                                        </div>
                                     </div>
                                 </div>
+
                                 <div>
-                                    <span style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--color-primary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{exam.courses?.title}</span>
-                                    <h3 style={{ fontSize: '1.2rem', fontWeight: 900, margin: '0.3rem 0 0', color: '#111827' }}>{exam.title}</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                        <span style={{ fontSize: '0.65rem', fontWeight: 900, color: 'white', backgroundColor: 'var(--color-primary)', padding: '2px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                                            {exam.courses?.title || 'Subject Exam'}
+                                        </span>
+                                    </div>
+                                    <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', lineHeight: 1.3 }}>{exam.title}</h3>
+                                    
                                     {attempt && !isRetakeApproved && (
-                                        <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                            <span style={{ fontSize: '1.1rem', fontWeight: 900, color: '#16a34a' }}>Score: {attempt.score} / {exam.num_questions}</span>
-                                            <span style={{ fontSize: '0.75rem', fontWeight: 800, backgroundColor: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '12px' }}>
-                                                {Math.round((attempt.score / exam.num_questions) * 100)}%
-                                            </span>
+                                        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'white', borderRadius: '12px', border: '1px solid #dcfce7', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <div>
+                                                <div style={{ fontSize: '0.7rem', color: '#16a34a', fontWeight: 800, textTransform: 'uppercase' }}>Your Result</div>
+                                                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#16a34a' }}>{attempt.score} <span style={{ fontSize: '0.9rem', color: '#94a3b8' }}>/ {exam.num_questions}</span></div>
+                                            </div>
+                                            <div style={{ textAlign: 'right' }}>
+                                                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#16a34a' }}>{Math.round((attempt.score / exam.num_questions) * 100)}%</div>
+                                                <div style={{ fontSize: '0.65rem', color: '#94a3b8', fontWeight: 700 }}>{new Date(attempt.completed_at).toLocaleDateString()}</div>
+                                            </div>
                                         </div>
                                     )}
+                                    
                                     {isRetakeApproved && (
-                                        <div style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#16a34a', fontWeight: 800 }}>🔓 Instructor reset your attempt. You can redo the exam now.</div>
+                                        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#f0fdf4', borderRadius: '12px', border: '1px solid #16a34a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <div style={{ backgroundColor: '#16a34a', color: 'white', width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Zap size={16} fill="white" />
+                                            </div>
+                                            <div style={{ fontSize: '0.8rem', color: '#166534', fontWeight: 800 }}>Reset Approved! You can retake now.</div>
+                                        </div>
                                     )}
                                 </div>
                                 

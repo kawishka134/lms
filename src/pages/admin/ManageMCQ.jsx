@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { FileText, Plus, Trash2, Edit2, Save, Clock, HelpCircle, Eye, EyeOff, FileUp, Zap, CheckCircle, ChevronRight, AlertCircle, Loader2, RotateCcw } from 'lucide-react';
+import { FileText, Plus, Trash2, Edit2, Save, Clock, HelpCircle, Eye, EyeOff, FileUp, Zap, CheckCircle, ChevronRight, AlertCircle, Loader2, RotateCcw, Download, User, BarChart2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import * as pdfjsLib from 'pdfjs-dist/build/pdf.mjs';
 import Tesseract from 'tesseract.js';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Set worker for pdfjs
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -18,7 +20,7 @@ export default function ManageMCQ() {
     const [uploading, setUploading] = useState(false);
     const [isExtracting, setIsExtracting] = useState(false);
     const [ocrProgress, setOcrProgress] = useState(0);
-    const [activeFormTab, setActiveFormTab] = useState('config'); // config | questions | answers
+    const [activeFormTab, setActiveFormTab] = useState('config'); // config | questions
     const fileInputRef = useRef(null);
 
     const [formData, setFormData] = useState({
@@ -40,6 +42,13 @@ export default function ManageMCQ() {
     const [retakeRequests, setRetakeRequests] = useState([]);
     const [loadingRequests, setLoadingRequests] = useState(false);
 
+    // Results tracking
+    const [viewingResultsFor, setViewingResultsFor] = useState(null);
+    const [examResults, setExamResults] = useState([]);
+    const [loadingResults, setLoadingResults] = useState(false);
+    const [viewingBreakdownFor, setViewingBreakdownFor] = useState(null);
+    const [examQuestions, setExamQuestions] = useState([]);
+
     useEffect(() => { fetchExams(); fetchCourses(); fetchRetakeRequests(); }, []);
 
     const fetchRetakeRequests = async () => {
@@ -55,7 +64,7 @@ export default function ManageMCQ() {
 
             // Fetch details individually to guarantee visibility
             const enriched = await Promise.all(rawReqs.map(async (req) => {
-                const { data: profile } = await supabase.from('profiles').select('full_name, phone').eq('id', req.student_id).single();
+                const { data: profile } = await supabase.from('student_profiles_view').select('full_name, phone').eq('id', req.student_id).single();
                 const { data: exam } = await supabase.from('mcq_exams').select('title, instructor_id').eq('id', req.exam_id).single();
                 return { ...req, profiles: profile, mcq_exams: exam };
             }));
@@ -102,6 +111,112 @@ export default function ManageMCQ() {
         if (!isSuperAdmin && currentInstructorId) query = query.eq('instructor_id', currentInstructorId);
         const { data } = await query;
         if (data) setCourses(data);
+    };
+
+    const fetchResults = async (exam) => {
+        setViewingResultsFor(exam);
+        setLoadingResults(true);
+        try {
+            const { data: attempts, error: attErr } = await supabase
+                .from('mcq_attempts')
+                .select('*, profiles:student_profiles_view(full_name, phone, email)')
+                .eq('exam_id', exam.id)
+                .eq('is_submitted', true)
+                .order('score', { ascending: false });
+
+            if (attErr) throw attErr;
+
+            setExamResults(attempts || []);
+            
+            // Also fetch questions for breakdown
+            const { data: qData } = await supabase.from('mcq_questions').select('*').eq('exam_id', exam.id).order('question_number');
+            setExamQuestions(qData || []);
+        } catch (err) {
+            showToast('Failed to fetch results: ' + err.message, 'error');
+        }
+        setLoadingResults(false);
+    };
+
+    const generatePDFReport = (exam, results) => {
+        const doc = new jsPDF();
+        
+        // Add Header Design
+        doc.setFillColor(14, 165, 233); // Primary Blue
+        doc.rect(0, 0, 210, 40, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.text("MCQ EXAM PERFORMANCE REPORT", 105, 20, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 105, 28, { align: "center" });
+
+        // Exam Details Section
+        doc.setTextColor(15, 23, 42);
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("Exam Details", 14, 55);
+        
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, 58, 196, 58);
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text([
+            `Exam Title: ${exam.title}`,
+            `Course: ${exam.courses?.title || 'N/A'}`,
+            `Total Questions: ${exam.num_questions}`,
+            `Time Limit: ${exam.time_limit_minutes} Minutes`,
+            `Total Candidates: ${results.length}`
+        ], 14, 66);
+
+        // Stats Summary
+        if (results.length > 0) {
+            const scores = results.map(r => r.score);
+            const avg = (scores.reduce((a, b) => a + b, 0) / results.length).toFixed(1);
+            const max = Math.max(...scores);
+            
+            doc.setFillColor(248, 250, 252);
+            doc.roundedRect(120, 60, 76, 30, 3, 3, 'F');
+            doc.setTextColor(14, 165, 233);
+            doc.setFont("helvetica", "bold");
+            doc.text("Stats Summary", 125, 68);
+            doc.setTextColor(71, 85, 105);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Class Average: ${avg} / ${exam.num_questions}`, 125, 75);
+            doc.text(`Top Score: ${max} / ${exam.num_questions}`, 125, 82);
+        }
+
+        // Student Table
+        const tableData = results.map((r, index) => [
+            index + 1,
+            r.profiles?.full_name || 'Anonymous',
+            r.profiles?.phone || '-',
+            `${r.score} / ${exam.num_questions}`,
+            `${Math.round((r.score / exam.num_questions) * 100)}%`,
+            new Date(r.completed_at).toLocaleDateString()
+        ]);
+
+        autoTable(doc, {
+            startY: 100,
+            head: [['#', 'Student Name', 'Phone', 'Score', 'Percentage', 'Date Completed']],
+            body: tableData,
+            headStyles: { fillColor: [14, 165, 233], textColor: [255, 255, 255], fontStyle: 'bold' },
+            alternateRowStyles: { fillColor: [248, 250, 252] },
+            margin: { top: 100 },
+            styles: { fontSize: 9, cellPadding: 4 },
+            didDrawPage: (data) => {
+                // Footer
+                doc.setFontSize(8);
+                doc.setTextColor(148, 163, 184);
+                doc.text(`Nexus Online Learning Management System - Page ${data.pageNumber}`, 105, 285, { align: "center" });
+            }
+        });
+
+        doc.save(`${exam.title.replace(/\s+/g, '_')}_Report.pdf`);
+        showToast("PDF Report Downloaded!", "success");
     };
 
     const handleAutoExtract = async () => {
@@ -408,8 +523,9 @@ export default function ManageMCQ() {
                                 </span>
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9' }}>
+                                <button onClick={() => fetchResults(exam)} className="btn btn-outline" style={{ flex: 1.5, padding: '0.5rem', borderColor: 'var(--color-primary)', color: 'var(--color-primary)' }}><BarChart2 size={16} /> Results</button>
                                 <button onClick={() => handleEdit(exam)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem' }}><Edit2 size={16} /> Edit</button>
-                                <button onClick={() => handleDelete(exam.id)} className="btn btn-outline" style={{ flex: 1, padding: '0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}><Trash2 size={16} /> Delete</button>
+                                <button onClick={() => handleDelete(exam.id)} className="btn btn-outline" style={{ flex: 0.8, padding: '0.5rem', color: '#ef4444', borderColor: '#fee2e2' }}><Trash2 size={16} /> Delete</button>
                             </div>
                         </div>
                     ))}
@@ -481,7 +597,7 @@ export default function ManageMCQ() {
                                     </div>
                                     <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '1rem' }}>💡 <b>New:</b> PDF එක upload කළොත් අපේ System එකට පුළුවන් auto ප්‍රශ්න ටික අරගන්න.</p>
                                 </div>
-                                <button type="button" onClick={() => setActiveFormTab('questions')} className="btn btn-primary" style={{ padding: '1rem', fontSize: '1rem' }}>
+                                <button type="button" onClick={() => setActiveFormTab('questions')} className="btn btn-primary" style={{ padding: '1rem', fontSize: '1rem', borderRadius: '14px', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)' }}>
                                     Next: Add Questions <ChevronRight size={18} />
                                 </button>
                             </div>
@@ -497,10 +613,13 @@ export default function ManageMCQ() {
                                     </div>
                                     {showParser && (
                                         <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                            <p style={{ fontSize: '0.78rem', color: '#92400e', lineHeight: 1.7 }}>
-                                                PDF eka open karala questions copy karanna. Format:<br />
-                                                <b>1. Question text?<br />i. Option A &nbsp; ii. Option B &nbsp; iii. Option C &nbsp; iv. Option D</b>
-                                            </p>
+                                            <div style={{ backgroundColor: 'rgba(255,255,255,0.5)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(180, 83, 9, 0.2)' }}>
+                                                <p style={{ fontSize: '0.78rem', color: '#92400e', lineHeight: 1.7, margin: 0 }}>
+                                                    <strong>💡 Best Results:</strong> PDF එකෙන් ප්‍රශ්න සහ පිළිතුරු Copy කරන්න. එක් පේළියක එක් ප්‍රශ්නයක් බැගින් තිබීම වඩාත් සුදුසුයි.<br />
+                                                    <strong>Format:</strong> <br />
+                                                    <code>1. Question here? (i) Option 1 (ii) Option 2 (iii) Option 3 (iv) Option 4</code>
+                                                </p>
+                                            </div>
                                             <textarea className="input-field" rows={8} placeholder={"1. ව්‍යාපාරයක ප්‍රධාන අරමුණ කුමක්ද?\ni. ලාභය ඉපැයීම\nii. සේවකයින් සෙවීම\niii. නිෂ්පාදනය\niv. අලෙවිය\n\n2. Next question here..."} value={bulkText} onChange={e => setBulkText(e.target.value)} style={{ fontFamily: 'monospace', fontSize: '0.85rem' }} />
                                             {parsedPreview.length > 0 && (
                                                 <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '8px', padding: '0.75rem', fontSize: '0.8rem' }}>
@@ -531,14 +650,14 @@ export default function ManageMCQ() {
                                             </div>
                                             <textarea className="input-field" rows={2} placeholder="Question text..." value={q.question_text} onChange={e => updateQuestion(idx, 'question_text', e.target.value)} style={{ marginBottom: '0.75rem', resize: 'none' }} />
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                                {[1, 2, 3, 4].slice(0, formData.options_per_question).map(optNum => (
+                                                {[1, 2, 3, 4, 5].slice(0, formData.options_per_question).map(optNum => (
                                                     <input key={optNum} type="text" className="input-field" style={{ margin: 0, fontSize: '0.85rem' }} placeholder={`${optionLabels[optNum - 1]}. Option ${optNum}`} value={q[`option_${optNum}`] || ''} onChange={e => updateQuestion(idx, `option_${optNum}`, e.target.value)} />
                                                 ))}
                                             </div>
                                             <div>
                                                 <label className="input-label" style={{ fontSize: '0.75rem' }}>Correct Answer:</label>
                                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                                    {[1, 2, 3, 4].slice(0, formData.options_per_question).map(optNum => (
+                                                    {[1, 2, 3, 4, 5].slice(0, formData.options_per_question).map(optNum => (
                                                         <button key={optNum} type="button" onClick={() => updateQuestion(idx, 'correct_option', optNum)}
                                                             style={{ width: '36px', height: '36px', borderRadius: '50%', border: '2px solid', borderColor: q.correct_option === optNum ? '#16a34a' : '#e2e8f0', backgroundColor: q.correct_option === optNum ? '#16a34a' : 'white', color: q.correct_option === optNum ? 'white' : '#64748b', fontWeight: 900, cursor: 'pointer', fontSize: '0.8rem', transition: 'all 0.2s' }}>
                                                             {optNum}
@@ -559,6 +678,128 @@ export default function ManageMCQ() {
                                         <Save size={20} /> {isSaving ? 'Saving...' : (editingId ? 'Update Exam' : `Publish Exam (${questions.length} Questions)`)}
                                     </button>
                                 )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Results Overview Modal */}
+            {viewingResultsFor && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 5000, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', padding: '1.5rem' }}>
+                    <div className="card shadow-premium" style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto', padding: '2.5rem', position: 'relative', background: 'white' }}>
+                        <button onClick={() => setViewingResultsFor(null)} style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', background: '#f1f5f9', border: 'none', color: '#64748b', cursor: 'pointer', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={24} /></button>
+
+                        <div style={{ marginBottom: '2rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div>
+                                    <h2 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--color-text)', margin: 0 }}>Exam Participation</h2>
+                                    <p style={{ color: 'var(--color-primary)', fontWeight: 800, fontSize: '1.1rem' }}>{viewingResultsFor.title}</p>
+                                </div>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    <button 
+                                        onClick={() => fetchResults(viewingResultsFor)} 
+                                        className="btn btn-outline" 
+                                        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                        disabled={loadingResults}
+                                    >
+                                        <RotateCcw size={18} className={loadingResults ? 'animate-spin' : ''} /> Refresh
+                                    </button>
+                                    <button 
+                                        onClick={() => generatePDFReport(viewingResultsFor, examResults)} 
+                                        className="btn btn-primary" 
+                                        style={{ gap: '0.75rem', padding: '1rem 1.5rem', boxShadow: '0 10px 20px rgba(14, 165, 233, 0.2)' }}
+                                        disabled={examResults.length === 0}
+                                    >
+                                        <Download size={20} /> Download PDF Report
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {loadingResults ? (
+                            <div style={{ padding: '5rem', textAlign: 'center' }}><Loader2 className="animate-spin" size={40} style={{ color: 'var(--color-primary)', margin: '0 auto' }} /><p>Loading student results...</p></div>
+                        ) : examResults.length === 0 ? (
+                            <div style={{ padding: '5rem', textAlign: 'center', background: '#f8fafc', borderRadius: '24px' }}>
+                                <BarChart2 size={48} style={{ opacity: 0.2, margin: '0 auto 1.5rem' }} />
+                                <h3 style={{ fontWeight: 800 }}>No Submissions Yet</h3>
+                                <p style={{ color: '#64748b' }}>No students have completed this exam so far.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', padding: '0 1rem 0.5rem', fontSize: '0.75rem', fontWeight: 900, color: '#94a3b8', textTransform: 'uppercase' }}>
+                                    <span>Student</span>
+                                    <span>Contact</span>
+                                    <span>Score / Grade</span>
+                                    <span>Completed At</span>
+                                </div>
+                                {examResults.map(res => {
+                                    const percentage = Math.round((res.score / viewingResultsFor.num_questions) * 100);
+                                    let color = '#ef4444'; // Red
+                                    if (percentage >= 75) color = '#16a34a'; // Green
+                                    else if (percentage >= 40) color = '#f59e0b'; // Amber
+
+                                    return (
+                                        <div key={res.id} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1.25rem', borderRadius: '16px', border: '1px solid #f1f5f9', background: 'white', transition: 'all 0.2s' }}>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr 0.8fr', alignItems: 'center' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--color-primary-light)', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={20} /></div>
+                                                    <div style={{ fontWeight: 800, color: 'var(--color-text)' }}>
+                                                        {(Array.isArray(res.profiles) ? res.profiles[0] : res.profiles)?.full_name || 'Anonymous'}
+                                                    </div>
+                                                </div>
+                                                <div style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>
+                                                    {(Array.isArray(res.profiles) ? res.profiles[0] : res.profiles)?.phone || '-'}
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 900, fontSize: '1.1rem', color }}>{res.score} / {viewingResultsFor.num_questions}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>{percentage}% Score</div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => setViewingBreakdownFor(viewingBreakdownFor?.id === res.id ? null : res)} 
+                                                        className="btn btn-outline" 
+                                                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                    >
+                                                        {viewingBreakdownFor?.id === res.id ? 'Hide Details' : 'View Details'} <ChevronRight size={14} style={{ transform: viewingBreakdownFor?.id === res.id ? 'rotate(90deg)' : 'none' }} />
+                                                    </button>
+                                                </div>
+                                                <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, textAlign: 'right' }}>{new Date(res.completed_at).toLocaleDateString()}</div>
+                                            </div>
+
+                                            {/* Detailed Breakdown Expansion */}
+                                            {viewingBreakdownFor?.id === res.id && (
+                                                <div style={{ padding: '1.25rem', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '0.5rem', animation: 'slideDown 0.3s ease-out' }}>
+                                                    <h4 style={{ fontSize: '0.85rem', fontWeight: 800, marginBottom: '1rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                       <CheckCircle size={14} /> Student Responses Breakdown
+                                                    </h4>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '0.75rem' }}>
+                                                        {examQuestions.map(q => {
+                                                            const studentAns = res.student_answers?.[q.question_number];
+                                                            const isCorrect = studentAns === q.correct_option;
+                                                            return (
+                                                                <div key={q.id} style={{ 
+                                                                    padding: '0.75rem', 
+                                                                    borderRadius: '10px', 
+                                                                    backgroundColor: isCorrect ? '#dcfce7' : studentAns ? '#fee2e2' : '#f1f5f9',
+                                                                    border: `1px solid ${isCorrect ? '#86efac' : studentAns ? '#fecaca' : '#e2e8f0'}`,
+                                                                    transition: 'transform 0.2s'
+                                                                }}>
+                                                                    <div style={{ fontSize: '0.7rem', fontWeight: 900, color: isCorrect ? '#166534' : studentAns ? '#991b1b' : '#64748b' }}>Q{q.question_number}</div>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
+                                                                        <span style={{ fontSize: '0.85rem', fontWeight: 800 }}>{studentAns ? optionLabels[studentAns-1] : '—'}</span>
+                                                                        {isCorrect ? <CheckCircle size={12} color="#16a34a" /> : studentAns ? <X size={12} color="#ef4444" /> : null}
+                                                                        {!isCorrect && q.correct_option && <span style={{ fontSize: '0.65rem', color: '#16a34a', fontWeight: 900 }}>→ {optionLabels[q.correct_option-1]}</span>}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

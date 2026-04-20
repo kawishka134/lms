@@ -77,7 +77,7 @@ export default function Home() {
         // Parallelized Loading
         const [settingsRes, coursesRes, instructorsRes] = await Promise.all([
             supabase.from('site_settings').select('*').eq('id', 'global').single(),
-            supabase.from('courses').select('*').order('created_at', { ascending: false }).limit(3),
+            supabase.from('courses').select('*').eq('is_featured', true).order('created_at', { ascending: false }).limit(3),
             supabase.from('instructors').select('*').eq('is_active', true).order('display_order')
         ]);
 
@@ -86,7 +86,13 @@ export default function Home() {
           if (settingsRes.data.hero_image_url) setHeroImg(settingsRes.data.hero_image_url);
           setTeacherImg(settingsRes.data.teacher_photo_url);
         }
-        if (coursesRes.data) setCourses(coursesRes.data);
+        if (coursesRes.data && coursesRes.data.length > 0) {
+          setCourses(coursesRes.data);
+        } else {
+          // Fallback if no featured courses, show latest 3
+          const { data: latest } = await supabase.from('courses').select('*').order('created_at', { ascending: false }).limit(3);
+          if (latest) setCourses(latest);
+        }
         if (instructorsRes.data) setInstructors(instructorsRes.data);
       } catch (err) {
         console.error("Home data error:", err);

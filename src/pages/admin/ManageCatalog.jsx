@@ -27,7 +27,8 @@ export default function ManageCatalog() {
         bank_account_name: '',
         bank_branch: '',
         is_free_trial: false, // Added
-        trial_duration: '' // Added
+        trial_duration: '', // Added
+        is_featured: false // Added
     });
 
     const adminRole = localStorage.getItem('admin_role'); 
@@ -273,7 +274,8 @@ export default function ManageCatalog() {
             bank_account_name: bankAccountName,
             bank_branch: bankBranch,
             is_free_trial: course.is_free_trial || false,
-            trial_duration: course.trial_duration || ''
+            trial_duration: course.trial_duration || '',
+            is_featured: course.is_featured || false
         });
         setIsOtherBatch(!dynamicBatches.includes(parseInt(course.batch)) && course.batch !== '');
         setEditingId(course.id);
@@ -576,6 +578,17 @@ export default function ManageCatalog() {
                                 <p style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#1e3a8a', opacity: 0.8, fontStyle: 'italic' }}>
                                     💡 Students will lose access automatically after {formData.trial_duration || 'X'} days from enrollment.
                                 </p>
+                            )}
+
+                            {/* Featured on Home (Super Admin Only) */}
+                            {isSuperAdmin && (
+                                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontWeight: 800, fontSize: '0.95rem', color: '#1e3a8a' }}>
+                                        <input type="checkbox" checked={formData.is_featured} onChange={e => setFormData({...formData, is_featured: e.target.checked})} style={{ width: '20px', height: '20px' }} />
+                                        ⭐ Featured Course (Show on Home Page)
+                                    </label>
+                                    <p style={{ margin: '0.25rem 0 0 2rem', fontSize: '0.7rem', color: '#3b82f6', opacity: 0.8 }}>Tick this to show this class in the "Choose Your Path" section of the landing page.</p>
+                                </div>
                             )}
                         </div>
 
