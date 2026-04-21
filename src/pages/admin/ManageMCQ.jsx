@@ -219,7 +219,9 @@ export default function ManageMCQ() {
         doc.save(`${exam.title.replace(/\s+/g, '_')}_Report.pdf`);
         showToast("PDF Report Downloaded!", "success");
     };
-
+    const handleAutoExtract = async () => {
+        setIsExtracting(true);
+        setOcrProgress(0);
         try {
             showToast('🤖 AI Scanning PDF... Please wait.', 'info');
             
