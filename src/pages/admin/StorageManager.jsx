@@ -10,7 +10,7 @@ import { useToast } from '../../components/Toast';
 export default function StorageManager() {
     const { showToast } = useToast();
     const [buckets, setBuckets] = useState([]);
-    const [selectedBucket, setSelectedBucket] = useState('payment_slips');
+    const [selectedBucket, setSelectedBucket] = useState('mcq_papers');
     const [files, setFiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [usage, setUsage] = useState({ used: 0, total: 1024 * 1024 * 1024 }); // 1GB
@@ -18,7 +18,7 @@ export default function StorageManager() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedPaths, setSelectedPaths] = useState([]);
 
-    const BUCKET_LIST = ['payment_slips', 'tute_slips', 'promo_videos', 'mcq_papers', 'site-media'];
+    const BUCKET_LIST = ['mcq_papers', 'payment_slips', 'tute_slips', 'promo_videos', 'site-media'];
 
     const fetchStorageData = async () => {
         setLoading(true);
