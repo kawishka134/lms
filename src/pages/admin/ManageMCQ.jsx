@@ -236,7 +236,7 @@ export default function ManageMCQ() {
                 setOcrProgress(baseProgress);
 
                 const page = await pdf.getPage(i);
-                const scale = 2.0; // Higher scale = better OCR
+                const scale = 2.5; // Higher scale = better OCR
                 const viewport = page.getViewport({ scale });
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
@@ -282,9 +282,9 @@ export default function ManageMCQ() {
         // Normalize: replace line breaks with space, then collapse multiple spaces
         const normalized = text.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim();
         
-        // Marker regex: catches 1. or I. or i) or a)
-        // Group 1: The marker itself
-        const markerRegex = /(\d{1,2}[\.\)]|[ivx]{1,5}[\.\)\/\|]|[a-e][\.\)\/\|])/gi;
+        // Marker regex: catches 1. or (1) or (i) or I. or i) or a)
+        // Order matters: match bracketed ones first to avoid partial matches
+        const markerRegex = /(\(\d{1,2}\)|\d{1,2}[\.\)]|\([ivx]{1,5}\)|[ivx]{1,5}[\.\)\/\|]|[a-e][\.\)\/\|])/gi;
 
         const parts = [];
         let lastIdx = 0;
@@ -306,32 +306,38 @@ export default function ManageMCQ() {
         const parsed = [];
         let current = null;
 
-        const isQuestionMarker = (m) => /^\d{1,2}[\.\)]$/.test(m);
-        const isOptionMarker = (m) => /^[ivx]{1,5}[\.\)\/\|]$|^[a-e][\.\)\/\|]$/i.test(m);
+        const isQuestionMarker = (m) => /^\d{1,2}[\.\)]$/.test(m) && !/^\(\d{1,2}\)$/.test(m);
+        const isOptionMarker = (m) => /^\(\d{1,2}\)$|^\([ivx]{1,5}\)$|^[ivx]{1,5}[\.\)\/\|]$|^[a-e][\.\)\/\|]$/i.test(m);
 
         for (let i = 0; i < parts.length; i++) {
             const p = parts[i];
             
             if (isQuestionMarker(p)) {
                 if (current) parsed.push(current);
+                // Look ahead for text
+                let text = '';
+                if (i + 1 < parts.length && !isQuestionMarker(parts[i+1]) && !isOptionMarker(parts[i+1])) {
+                    text = parts[i+1];
+                    i++;
+                }
                 current = {
                     question_number: parsed.length + 1,
-                    question_text: parts[i + 1] || '',
+                    question_text: text,
                     option_1: '', option_2: '', option_3: '', option_4: '', option_5: '',
                     correct_option: 0
                 };
-                i++;
             } else if (current && isOptionMarker(p)) {
-                // If the next part is also a marker, the option has no text (skip)
-                const nextPart = parts[i + 1] || '';
-                if (!isQuestionMarker(nextPart) && !isOptionMarker(nextPart)) {
-                    if (!current.option_1) current.option_1 = nextPart;
-                    else if (!current.option_2) current.option_2 = nextPart;
-                    else if (!current.option_3) current.option_3 = nextPart;
-                    else if (!current.option_4) current.option_4 = nextPart;
-                    else if (!current.option_5) current.option_5 = nextPart;
+                // Look ahead for text
+                let text = '';
+                if (i + 1 < parts.length && !isQuestionMarker(parts[i+1]) && !isOptionMarker(parts[i+1])) {
+                    text = parts[i+1];
                     i++;
                 }
+                if (!current.option_1) current.option_1 = text;
+                else if (!current.option_2) current.option_2 = text;
+                else if (!current.option_3) current.option_3 = text;
+                else if (!current.option_4) current.option_4 = text;
+                else if (!current.option_5) current.option_5 = text;
             }
         }
         
