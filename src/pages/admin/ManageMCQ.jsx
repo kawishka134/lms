@@ -18,9 +18,10 @@ export default function ManageMCQ() {
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [uploading, setUploading] = useState(false);
-    const [isExtracting, setIsExtracting] = useState(false);
     const [ocrProgress, setOcrProgress] = useState(0);
     const [activeFormTab, setActiveFormTab] = useState('config'); // config | questions
+    const [localFile, setLocalFile] = useState(null);
+    const [keepPdf, setKeepPdf] = useState(false);
     const fileInputRef = useRef(null);
 
     const [formData, setFormData] = useState({
@@ -219,14 +220,21 @@ export default function ManageMCQ() {
         showToast("PDF Report Downloaded!", "success");
     };
 
-    const handleAutoExtract = async () => {
-        if (!formData.pdf_url) return showToast('Please upload a PDF first.', 'warning');
-        setIsExtracting(true);
-        setOcrProgress(0);
         try {
             showToast('🤖 AI Scanning PDF... Please wait.', 'info');
-            const response = await fetch(formData.pdf_url);
-            const arrayBuffer = await response.arrayBuffer();
+            
+            let arrayBuffer;
+            if (localFile) {
+                // Scan directly from local file (No storage used)
+                arrayBuffer = await localFile.arrayBuffer();
+            } else if (formData.pdf_url) {
+                // Fallback for existing PDFs
+                const response = await fetch(formData.pdf_url);
+                arrayBuffer = await response.arrayBuffer();
+            } else {
+                return showToast('Please select or upload a PDF first.', 'warning');
+            }
+
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             
             let fullText = '';
@@ -378,17 +386,33 @@ export default function ManageMCQ() {
     const handleFileUpload = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
+        
+        // Just store locally for scanning
+        setLocalFile(file);
+        showToast('✅ PDF Selected. You can now use AI Scan.', 'success');
+        
+        // Reset the url if they chose a new file but haven't uploaded yet
+        setFormData(prev => ({ ...prev, pdf_url: '' }));
+    };
+
+    const performPermanentUpload = async () => {
+        if (!localFile) return;
         setUploading(true);
         try {
-            const ext = file.name.split('.').pop();
+            const ext = localFile.name.split('.').pop();
             const fileName = `${Date.now()}.${ext}`;
-            const { error } = await supabase.storage.from('mcq_papers').upload(fileName, file, { upsert: true });
+            const { error } = await supabase.storage.from('mcq_papers').upload(fileName, localFile, { upsert: true });
             if (error) throw error;
             const { data } = supabase.storage.from('mcq_papers').getPublicUrl(fileName);
             setFormData(prev => ({ ...prev, pdf_url: data.publicUrl }));
-            showToast('✅ PDF uploaded!', 'success');
-        } catch (err) { showToast('Upload failed: ' + err.message, 'error'); }
-        setUploading(false);
+            showToast('✅ PDF permanently saved to storage!', 'success');
+            return data.publicUrl;
+        } catch (err) { 
+            showToast('Upload failed: ' + err.message, 'error');
+            return null;
+        } finally {
+            setUploading(false);
+        }
     };
 
     const handleSave = async (e) => {
@@ -399,7 +423,15 @@ export default function ManageMCQ() {
 
         setIsSaving(true);
         try {
-            const examData = { ...formData, instructor_id: currentInstructorId, num_questions: questions.length, time_limit_minutes: parseInt(formData.time_limit_minutes) };
+            let finalPdfUrl = formData.pdf_url;
+            
+            // If they chose to keep PDF and we have a local file, upload it now
+            if (keepPdf && localFile) {
+                const uploadedUrl = await performPermanentUpload();
+                if (uploadedUrl) finalPdfUrl = uploadedUrl;
+            }
+
+            const examData = { ...formData, pdf_url: finalPdfUrl, instructor_id: currentInstructorId, num_questions: questions.length, time_limit_minutes: parseInt(formData.time_limit_minutes) };
             let examId = editingId;
 
             if (editingId) {
@@ -576,35 +608,38 @@ export default function ManageMCQ() {
                                     </div>
                                 </div>
                                 <div style={{ backgroundColor: '#f8fafc', padding: '1.5rem', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                                    <label className="input-label">Question Paper PDF (Recommended)</label>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-outline" disabled={uploading}>
-                                            <FileUp size={16} /> {uploading ? 'Uploading...' : 'Upload PDF'}
-                                        </button>
-                                        <input type="file" ref={fileInputRef} accept="application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
-                                        
-                                        {formData.pdf_url && (
-                                            <button type="button" onClick={handleAutoExtract} disabled={isExtracting} className="btn btn-primary" style={{ backgroundColor: '#8b5cf6', borderColor: '#7c3aed', minWidth: '220px' }}>
-                                                {isExtracting ? (
-                                                    <>
-                                                        <Loader2 size={16} className="animate-spin" />
-                                                        AI Scanning ({ocrProgress}%)
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <Zap size={16} /> 
-                                                        Auto-Extract (AI Scan) ✨
-                                                    </>
-                                                )}
+                                    <label className="input-label">Question Paper PDF (AI Scanner)</label>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
+                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="btn btn-outline">
+                                                <FileUp size={16} /> Choose PDF
                                             </button>
-                                        )}
+                                            <input type="file" ref={fileInputRef} accept="application/pdf" style={{ display: 'none' }} onChange={handleFileUpload} />
+                                            
+                                            {(localFile || formData.pdf_url) && (
+                                                <button type="button" onClick={handleAutoExtract} disabled={isExtracting} className="btn btn-primary" style={{ backgroundColor: '#8b5cf6', borderColor: '#7c3aed' }}>
+                                                    {isExtracting ? (
+                                                        <><Loader2 size={16} className="animate-spin" /> Scanning ({ocrProgress}%)</>
+                                                    ) : (
+                                                        <><Zap size={16} /> Auto-Extract (Scan) ✨</>
+                                                    )}
+                                                </button>
+                                            )}
+                                            {localFile && <span style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 800 }}>📂 {localFile.name} (Ready to Scan)</span>}
+                                            {formData.pdf_url && !localFile && <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 800 }}>✅ Paper saved in storage</span>}
+                                        </div>
 
-                                        {formData.pdf_url ? <span style={{ fontSize: '0.8rem', color: '#16a34a', fontWeight: 800 }}>✅ PDF Uploaded</span> : <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Upload PDF to auto-generate questions</span>}
+                                        {localFile && (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: 'white', padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                                <input type="checkbox" id="keepPdf" checked={keepPdf} onChange={e => setKeepPdf(e.target.checked)} style={{ width: '18px', height: '18px' }} />
+                                                <label htmlFor="keepPdf" style={{ fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}>Save this PDF permanently for students to download?</label>
+                                            </div>
+                                        )}
                                     </div>
-                                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '1rem' }}>💡 <b>New:</b> PDF එක upload කළොත් අපේ System එකට පුළුවන් auto ප්‍රශ්න ටික අරගන්න.</p>
+                                    <p style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '1rem' }}>💡 <b>Local Scan:</b> දැන් ඔයාට පුළුවන් PDF එක storage එකට upload කරන්නේ නැතුවම ප්‍රශ්න ටික scan කරලා කරලා ගන්න.</p>
                                 </div>
                                 <button type="button" onClick={() => setActiveFormTab('questions')} className="btn btn-primary" style={{ padding: '1rem', fontSize: '1rem', borderRadius: '14px', boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)' }}>
-                                    Next: Add Questions <ChevronRight size={18} />
+                                    Next: Review Questions <ChevronRight size={18} />
                                 </button>
                             </div>
                         )}

@@ -18,7 +18,7 @@ export default function StorageManager() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [selectedPaths, setSelectedPaths] = useState([]);
 
-    const BUCKET_LIST = ['payment_slips', 'tute_slips', 'promo_videos', 'site-media'];
+    const BUCKET_LIST = ['payment_slips', 'tute_slips', 'promo_videos', 'mcq_papers', 'site-media'];
 
     const fetchStorageData = async () => {
         setLoading(true);
