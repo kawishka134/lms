@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
 import { MapPin } from 'lucide-react'; 
+import { isSmsEnabled } from '../../utils/config';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -166,8 +167,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // 1. CRITICAL: Check if NIC already exists in PROFILES to prevent duplicates before Auth
-      // phone check is temporarily disabled for testing upon user request
+      // 1. CRITICAL: Check if NIC already exists in PROFILES
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
@@ -176,6 +176,16 @@ export default function Register() {
 
       if (existingProfile) {
         throw new Error('NIC is already registered. Please login or use different details.');
+      }
+
+      // Check if SMS is enabled globally
+      const smsActive = await isSmsEnabled();
+
+      if (!smsActive) {
+        // Skip OTP and register directly
+        console.log('SMS is disabled. Skipping OTP verification.');
+        await completeRegistration();
+        return;
       }
 
       // Generate 6-digit OTP
@@ -218,12 +228,7 @@ export default function Register() {
     }
   };
 
-  const verifyAndRegister = async () => {
-    if (userOtp !== generatedOtp) {
-      showToast('Invalid OTP. Please try again.', 'error');
-      return;
-    }
-
+  const completeRegistration = async () => {
     setLoading(true);
     try {
       // 2. Auth Sign Up
@@ -272,6 +277,14 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const verifyAndRegister = async () => {
+    if (userOtp !== generatedOtp) {
+      showToast('Invalid OTP. Please try again.', 'error');
+      return;
+    }
+    await completeRegistration();
   };
 
   const isFormInvalid = !validations.nic || !validations.phone || !formData.nic || !formData.phone || !formData.email || !formData.password || formData.subject.length === 0 || loading;

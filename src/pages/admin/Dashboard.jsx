@@ -3,6 +3,8 @@ import { Users, Video, BookOpen, AlertCircle, Search, MapPin, Phone, UserCheck, 
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { sendSMS } from '../../utils/smsGateway';
+import { isSmsEnabled } from '../../utils/config';
+import { Settings, Shield } from 'lucide-react';
 
 export default function AdminDashboard() {
   const { showToast } = useToast();
@@ -19,6 +21,8 @@ export default function AdminDashboard() {
   const [myCommissionReceipts, setMyCommissionReceipts] = useState([]);
   const [profileName, setProfileName] = useState('Admin');
   const [expiryInfo, setExpiryInfo] = useState(null);
+  const [smsEnabled, setSmsEnabled] = useState(false);
+  const [settingLoading, setSettingLoading] = useState(false);
 
   const adminRole = localStorage.getItem('admin_role');
   const instructorId = localStorage.getItem('instructor_id');
@@ -98,7 +102,14 @@ export default function AdminDashboard() {
     };
     fetchStats();
 
-    // Real-time Subscriptions for Dashboard Stats
+    // Fetch initial SMS setting
+    const fetchSmsSetting = async () => {
+        const enabled = await isSmsEnabled();
+        setSmsEnabled(enabled);
+    };
+    if (adminRole === 'super_admin') fetchSmsSetting();
+
+    // Real-time Subscriptions...
     const channels = [
         supabase.channel('dashboard-enrollments').on('postgres_changes', { event: '*', table: 'enrollments' }, () => fetchStats()).subscribe(),
         supabase.channel('dashboard-tutes').on('postgres_changes', { event: '*', table: 'tute_enrollments' }, () => fetchStats()).subscribe(),
@@ -215,6 +226,24 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleToggleSms = async () => {
+    setSettingLoading(true);
+    try {
+        const newValue = !smsEnabled;
+        const { error } = await supabase
+            .from('site_configs')
+            .upsert({ key: 'sms_enabled', value: newValue }, { onConflict: 'key' });
+        
+        if (error) throw error;
+        setSmsEnabled(newValue);
+        showToast(`SMS Verification is now ${newValue ? 'ENABLED' : 'DISABLED'}.`, 'success');
+    } catch (err) {
+        showToast("Failed to update setting: " + err.message, 'error');
+    } finally {
+        setSettingLoading(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
@@ -224,6 +253,36 @@ export default function AdminDashboard() {
            </h1>
            <p style={{ color: 'var(--color-text-muted)', fontWeight: 700, marginTop: '4px' }}>Welcome back, {profileName}! Here's your performance snapshot.</p>
         </div>
+
+        {adminRole === 'super_admin' && (
+            <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '1rem', 
+                    backgroundColor: 'white', 
+                    padding: '0.75rem 1.5rem', 
+                    borderRadius: '16px', 
+                    boxShadow: 'var(--shadow-sm)',
+                    border: '1px solid var(--color-surface-border)'
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>SMS Verification</span>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 900, color: smsEnabled ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                            {smsEnabled ? 'ACTIVE' : 'DISABLED'}
+                        </span>
+                    </div>
+                    <button 
+                        onClick={handleToggleSms} 
+                        disabled={settingLoading}
+                        className={smsEnabled ? "btn btn-outline" : "btn btn-primary"}
+                        style={{ padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+                    >
+                        {settingLoading ? '...' : smsEnabled ? 'Disable' : 'Enable'}
+                    </button>
+                </div>
+            </div>
+        )}
       </div>
       
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem', marginBottom: '3rem' }}>

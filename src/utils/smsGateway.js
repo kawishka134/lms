@@ -1,6 +1,17 @@
+import { isSmsEnabled } from './config';
+
 export const sendSMS = async (phone, message) => {
   try {
     if (!phone) return { success: false, message: 'No phone number provided' };
+
+    // Global Check: Should we actually send the SMS?
+    const smsActive = await isSmsEnabled();
+    if (!smsActive) {
+      console.log('Skipping real SMS (SMS is disabled in settings):');
+      console.log('To:', phone);
+      console.log('Message:', message);
+      return { success: true, message: 'SMS logic skipped (Global OFF)', dry_run: true };
+    }
     
     let formattedPhone = phone.trim().replace(/\s+/g, '').replace(/-/g, ''); // Remove spaces and dashes
     if (formattedPhone.startsWith('0')) {

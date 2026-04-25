@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, XCircle, Search, FileText, ShoppingBag, Users, GraduationCap, History, DollarSign, Video, AlertCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Search, FileText, ShoppingBag, Users, GraduationCap, History, DollarSign, Video, AlertCircle, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { sendSMS } from '../../utils/smsGateway';

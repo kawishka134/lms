@@ -3,6 +3,7 @@ import { Mail, CheckCircle, Phone, KeyRound, UserCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
 import { sendSMS } from '../../utils/smsGateway';
+import { isSmsEnabled } from '../../utils/config';
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
@@ -31,20 +32,36 @@ export default function ForgotPassword() {
     setSuccess(false);
     
     try {
-      let cleanPhone = phone.replace(/\D/g, '');
-      if (cleanPhone.startsWith('0')) cleanPhone = '94' + cleanPhone.substring(1);
-      if (!cleanPhone.startsWith('94')) cleanPhone = '94' + cleanPhone;
-
-      const { data: profile, error: dbErr } = await supabase.from('profiles').select('email, phone, full_name').eq('phone', cleanPhone).maybeSingle();
+      // Use RPC function to bypass RLS - direct table query blocked for logged-out users
+      const { data: results, error: dbErr } = await supabase
+        .rpc('find_profile_by_phone', { search_phone: phone });
+      
+      const profile = results && results.length > 0 ? results[0] : null;
       
       if (dbErr) throw dbErr;
 
       if (profile && profile.email) {
           setEmail(profile.email);
+          
+          const smsActive = await isSmsEnabled();
+          if (!smsActive) {
+            // Skip OTP: immediately send reset link
+            const { error: resetErr } = await supabase.auth.resetPasswordForEmail(profile.email, {
+                redirectTo: window.location.origin + '/reset-password',
+            });
+            if (resetErr) throw resetErr;
+            setSuccess(true);
+            setStep(3);
+            return;
+          }
+
           const otp = Math.floor(100000 + Math.random() * 900000).toString();
           setGeneratedOtp(otp);
-          await sendSMS(cleanPhone, `Nexus LMS: Hello ${profile.full_name}, Your password reset OTP is ${otp}. Do not share this code.`);
+          const smsPhone = profile.phone.startsWith('0') ? '94' + profile.phone.substring(1) : profile.phone;
+          await sendSMS(smsPhone, `Nexus LMS: Hello ${profile.full_name}, Your password reset OTP is ${otp}. Do not share this code.`);
           setStep(2);
+      } else if (profile && !profile.email) {
+          setError("Your account was found but no email is linked. Please contact support to recover your account.");
       } else {
           setError("Mobile number not found. If you are a teacher, use the Teacher flow.");
       }
