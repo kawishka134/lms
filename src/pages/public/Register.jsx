@@ -5,6 +5,8 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
 import { MapPin } from 'lucide-react'; 
 import { isSmsEnabled } from '../../utils/config';
+import { auth } from '../../lib/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -12,7 +14,7 @@ export default function Register() {
   const { showToast } = useToast();
 
   const [showOtpModal, setShowOtpModal] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
   const [userOtp, setUserOtp] = useState('');
   
   const [formData, setFormData] = useState({
@@ -167,7 +169,8 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // 1. CRITICAL: Check if NIC already exists in PROFILES
+      // --- DISABLED NIC CHECK FOR TESTING AS REQUESTED ---
+      /*
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id')
@@ -177,46 +180,31 @@ export default function Register() {
       if (existingProfile) {
         throw new Error('NIC is already registered. Please login or use different details.');
       }
+      */
 
-      // Check if SMS is enabled globally
-      const smsActive = await isSmsEnabled();
+      // Force Firebase OTP Flow
 
-      if (!smsActive) {
-        // Skip OTP and register directly
-        console.log('SMS is disabled. Skipping OTP verification.');
-        await completeRegistration();
-        return;
-      }
-
-      // Generate 6-digit OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedOtp(otp);
-
-      // Send via SMSLenz API
+      // Send via Firebase Phone Auth
       let formattedPhone = formData.phone.trim();
       if (formattedPhone.startsWith('0')) {
-        formattedPhone = '94' + formattedPhone.slice(1);
-      } else if (!formattedPhone.startsWith('94') && !formattedPhone.startsWith('+')) {
-        formattedPhone = '94' + formattedPhone;
+        formattedPhone = '+94' + formattedPhone.slice(1);
+      } else if (!formattedPhone.startsWith('+')) {
+        formattedPhone = '+' + formattedPhone;
       }
-      formattedPhone = formattedPhone.replace('+', ''); // Formatting properly for SMSLenz
 
-      const response = await fetch('https://smslenz.lk/api/send-sms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: '1553',
-          api_key: 'e35daf6c-d086-4a9d-a6b9-9b5f43b9ed38',
-          sender_id: 'SMSlenzDEMO',
-          contact: `+${formattedPhone}`,
-          message: `Your Registration OTP is: ${otp}`
-        })
-      });
-
-      const result = await response.json();
-      if (!result.success) {
-         throw new Error('Failed to send OTP SMS. ' + (result.message || ''));
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          'size': 'invisible',
+          'callback': (response) => {
+            // reCAPTCHA solved
+          }
+        });
       }
+
+      const appVerifier = window.recaptchaVerifier;
+
+      const result = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
+      setConfirmationResult(result);
 
       setShowOtpModal(true);
       showToast('OTP sent successfully to your mobile number!', 'success');
@@ -280,11 +268,24 @@ export default function Register() {
   };
 
   const verifyAndRegister = async () => {
-    if (userOtp !== generatedOtp) {
-      showToast('Invalid OTP. Please try again.', 'error');
-      return;
+    setLoading(true);
+    try {
+      if (!confirmationResult) {
+         throw new Error("No OTP request found. Please try again.");
+      }
+      await confirmationResult.confirm(userOtp);
+      // If successful, complete registration
+      await completeRegistration();
+    } catch (error) {
+      console.error(error);
+      if (error.code === 'auth/invalid-verification-code') {
+        showToast('Invalid OTP. Please try again.', 'error');
+      } else {
+         showToast(error.message || 'Verification failed. Please try again.', 'error');
+      }
+    } finally {
+      setLoading(false);
     }
-    await completeRegistration();
   };
 
   const isFormInvalid = !validations.nic || !validations.phone || !formData.nic || !formData.phone || !formData.email || !formData.password || formData.subject.length === 0 || loading;
@@ -448,6 +449,8 @@ export default function Register() {
 
             <div style={{ gridColumn: '1 / -1' }}><label className="input-label">Home Address (For Tutes)</label><textarea name="address" className="input-field" rows="2" placeholder="Full address including house number..." required onChange={handleChange} /></div>
             <div style={{ gridColumn: '1 / -1' }}><label className="input-label">Create Password</label><input name="password" type="password" className="input-field" placeholder="Choose a strong password (min 6 chars)" minLength={6} required onChange={handleChange} /></div>
+
+            <div id="recaptcha-container"></div>
 
             <div style={{ gridColumn: '1 / -1', marginTop: '1rem' }}>
                 <button 
