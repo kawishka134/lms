@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Mail, CheckCircle, Phone, KeyRound, UserCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
-import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../../lib/firebase';
+import { auth } from '../../lib/firebase';
+import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
