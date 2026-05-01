@@ -169,18 +169,19 @@ export default function Register() {
     setLoading(true);
 
     try {
-      // --- DISABLED NIC CHECK FOR TESTING AS REQUESTED ---
-      /*
       const { data: existingProfile } = await supabase
         .from('profiles')
-        .select('id')
-        .eq('nic', formData.nic)
-        .single();
+        .select('id, nic, phone')
+        .or(`nic.eq.${formData.nic},phone.eq.${formData.phone}`);
 
-      if (existingProfile) {
-        throw new Error('NIC is already registered. Please login or use different details.');
+      if (existingProfile && existingProfile.length > 0) {
+        const match = existingProfile[0];
+        if (match.nic === formData.nic) {
+            throw new Error('NIC is already registered. Please login or use different details.');
+        } else {
+            throw new Error('Phone number is already registered. Please login or use a different number.');
+        }
       }
-      */
 
       // Force Firebase OTP Flow
 

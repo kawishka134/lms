@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { Mail, CheckCircle, Phone, KeyRound, UserCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { Link } from 'react-router-dom';
-import { sendSMS } from '../../utils/smsGateway';
-import { isSmsEnabled } from '../../utils/config';
+import { auth, RecaptchaVerifier, signInWithPhoneNumber } from '../../lib/firebase';
 
 export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
@@ -22,7 +21,7 @@ export default function ForgotPassword() {
 
   // Student OTP States
   const [step, setStep] = useState(1); // 1: Send OTP, 2: Verify OTP
-  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState(null);
   const [enteredOtp, setEnteredOtp] = useState('');
 
   const handleSendOtp = async (e) => {
@@ -43,22 +42,27 @@ export default function ForgotPassword() {
       if (profile && profile.email) {
           setEmail(profile.email);
           
-          const smsActive = await isSmsEnabled();
-          if (!smsActive) {
-            // Skip OTP: immediately send reset link
-            const { error: resetErr } = await supabase.auth.resetPasswordForEmail(profile.email, {
-                redirectTo: window.location.origin + '/reset-password',
-            });
-            if (resetErr) throw resetErr;
-            setSuccess(true);
-            setStep(3);
-            return;
+          // Send via Firebase Phone Auth
+          let formattedPhone = profile.phone.trim();
+          if (formattedPhone.startsWith('0')) {
+            formattedPhone = '+94' + formattedPhone.slice(1);
+          } else if (!formattedPhone.startsWith('+')) {
+            formattedPhone = '+' + formattedPhone;
           }
 
-          const otp = Math.floor(100000 + Math.random() * 900000).toString();
-          setGeneratedOtp(otp);
-          const smsPhone = profile.phone.startsWith('0') ? '94' + profile.phone.substring(1) : profile.phone;
-          await sendSMS(smsPhone, `Nexus LMS: Hello ${profile.full_name}, Your password reset OTP is ${otp}. Do not share this code.`);
+          if (!window.recaptchaVerifier) {
+            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+              'size': 'invisible',
+              'callback': (response) => {
+                // reCAPTCHA solved
+              }
+            });
+          }
+
+          const appVerifier = window.recaptchaVerifier;
+          const result = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
+          
+          setConfirmationResult(result);
           setStep(2);
       } else if (profile && !profile.email) {
           setError("Your account was found but no email is linked. Please contact support to recover your account.");
@@ -78,9 +82,9 @@ export default function ForgotPassword() {
     setError('');
 
     try {
-        if (enteredOtp !== generatedOtp) {
-            throw new Error("Invalid OTP code. Please try again.");
-        }
+        // Verify OTP with Firebase
+        if (!confirmationResult) throw new Error("OTP session expired. Please try again.");
+        await confirmationResult.confirm(enteredOtp);
 
         const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: window.location.origin + '/reset-password',
@@ -208,7 +212,9 @@ export default function ForgotPassword() {
             )
         ) : (
             // STUDENT FLOW
-            step === 1 ? (
+            <>
+            <div id="recaptcha-container"></div>
+            {step === 1 ? (
                 <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     <div style={{ backgroundColor: 'rgba(56, 189, 248, 0.05)', padding: '1rem', borderRadius: '12px', border: '1px dashed #38bdf8', marginBottom: '0.5rem' }}>
                         <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 600, color: '#0369a1' }}>
@@ -238,9 +244,10 @@ export default function ForgotPassword() {
                     <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', padding: '1rem', fontSize: '1.125rem' }}>
                         {loading ? 'Verifying...' : 'Verify & Send Reset Link'}
                     </button>
-                    <button type="button" onClick={() => { setStep(1); setEnteredOtp(''); setGeneratedOtp(''); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 700 }}>Resend OTP / Change Number</button>
+                    <button type="button" onClick={() => { setStep(1); setEnteredOtp(''); setConfirmationResult(null); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 700 }}>Resend OTP / Change Number</button>
                 </form>
-            )
+            )}
+            </>
         )}
         
         {!success && !adminRequestSent && (
