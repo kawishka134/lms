@@ -121,7 +121,15 @@ export default function StudentLayout() {
               </div>
 
               {/* Mobile Menu Button */}
-              <button className="mobile-menu-btn" onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)' }}>
+              <button 
+                className="mobile-menu-btn" 
+                onClick={() => setIsMenuOpen(!isMenuOpen)} 
+                style={{ 
+                  color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)',
+                  background: (isHomePage && !isMenuOpen) ? 'rgba(255,255,255,0.1)' : 'var(--color-surface)',
+                  border: (isHomePage && !isMenuOpen) ? '1px solid rgba(255,255,255,0.2)' : '1px solid var(--color-surface-border)'
+                }}
+              >
                 {isMenuOpen ? <X /> : <Menu />}
               </button>
           </div>

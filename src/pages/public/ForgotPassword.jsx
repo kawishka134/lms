@@ -51,14 +51,22 @@ export default function ForgotPassword() {
             formattedPhone = '+' + formattedPhone;
           }
 
-          if (!window.recaptchaVerifier) {
-            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-              'size': 'invisible',
-              'callback': (response) => {
-                // reCAPTCHA solved
-              }
-            });
+          // Clean up existing recaptcha if any
+          if (window.recaptchaVerifier) {
+            try {
+              window.recaptchaVerifier.clear();
+            } catch (e) {
+              console.error("Error clearing recaptcha:", e);
+            }
+            window.recaptchaVerifier = null;
           }
+
+          window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+            'size': 'invisible',
+            'callback': (response) => {
+              // reCAPTCHA solved
+            }
+          });
 
           const appVerifier = window.recaptchaVerifier;
           const result = await signInWithPhoneNumber(auth, formattedPhone, appVerifier);
