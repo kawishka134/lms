@@ -108,6 +108,66 @@ const WatermarkVideo = ({ videoId, title, studentProfile }) => {
     return () => clearInterval(int);
   }, []);
 
+  // --- NEW SECURITY LOGIC ---
+  const [securityAlert, setSecurityAlert] = useState(false);
+
+  useEffect(() => {
+    const handleSecurityAction = () => {
+        if (playerRef.current && isReady) {
+            playerRef.current.pauseVideo();
+            playerRef.current.mute();
+            setSecurityAlert(true);
+        }
+    };
+
+    const handleFocus = () => {
+        // Optional: Auto-resume or keep paused
+    };
+
+    const handleBlur = () => {
+        handleSecurityAction();
+    };
+
+    const handleVisibilityChange = () => {
+        if (document.visibilityState === 'hidden') {
+            handleSecurityAction();
+        }
+    };
+
+    const handleKeyDown = (e) => {
+        // Block Inspect Element and View Source
+        if (
+            e.key === 'F12' || 
+            (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) || 
+            (e.ctrlKey && e.key === 'u')
+        ) {
+            e.preventDefault();
+            handleSecurityAction();
+            return false;
+        }
+    };
+
+    window.addEventListener('blur', handleBlur);
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+        window.removeEventListener('blur', handleBlur);
+        window.removeEventListener('focus', handleFocus);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isReady]);
+
+  const resumeVideo = () => {
+    if (playerRef.current && isReady) {
+        playerRef.current.unMute();
+        playerRef.current.playVideo();
+        setSecurityAlert(false);
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
@@ -171,6 +231,29 @@ const WatermarkVideo = ({ videoId, title, studentProfile }) => {
       <div style={{ position: 'absolute', top: watermarkPos.top, left: watermarkPos.left, zIndex: 115, pointerEvents: 'none', color: 'rgba(255, 255, 255, 0.2)', fontSize: '0.75rem', fontWeight: 900, textShadow: '2px 2px 4px rgba(0,0,0,0.8)', whiteSpace: 'nowrap', transition: 'all 5s ease-in-out' }}>
         {watermarkText}
       </div>
+
+      {/* 5. SECURITY ALERT OVERLAY */}
+      {securityAlert && (
+        <div style={{ 
+            position: 'absolute', inset: 0, zIndex: 200, 
+            backgroundColor: 'rgba(0,0,0,0.95)', 
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', textAlign: 'center'
+        }}>
+            <ShieldCheck size={64} color="var(--color-primary)" style={{ marginBottom: '20px' }} />
+            <h3 style={{ color: 'white', fontWeight: 900, marginBottom: '10px' }}>PROTECTION ACTIVE</h3>
+            <p style={{ color: '#ccc', fontSize: '0.9rem', marginBottom: '25px', maxWidth: '300px' }}>
+                Video paused because you left the window or tried to use a screen tool.
+            </p>
+            <button 
+                onClick={resumeVideo}
+                className="btn btn-primary"
+                style={{ borderRadius: '50px', padding: '12px 30px' }}
+            >
+                Resume Video
+            </button>
+        </div>
+      )}
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
