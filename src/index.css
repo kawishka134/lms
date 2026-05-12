@@ -721,3 +721,23 @@ ul {
   }
 }
 
+
+/* Mobile App Button Styles */
+.nav-app-btn {
+  transition: all 0.3s var(--transition-bounce);
+}
+
+.nav-app-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+}
+
+@media (max-width: 768px) {
+  .nav-app-btn {
+    padding: 0.5rem !important;
+    gap: 0 !important;
+  }
+  .desktop-only {
+    display: none !important;
+  }
+}
