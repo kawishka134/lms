@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, Video, BookOpen, AlertCircle, Search, MapPin, Phone, UserCheck, CreditCard, ChevronRight, Trash2, LayoutGrid, DollarSign, Upload } from 'lucide-react';
+import { Users, Video, BookOpen, AlertCircle, Search, MapPin, Phone, UserCheck, CreditCard, ChevronRight, Trash2, LayoutGrid, DollarSign, Upload, Download } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../components/Toast';
 import { sendSMS } from '../../utils/smsGateway';
@@ -23,6 +23,8 @@ export default function AdminDashboard() {
   const [expiryInfo, setExpiryInfo] = useState(null);
   const [smsEnabled, setSmsEnabled] = useState(false);
   const [settingLoading, setSettingLoading] = useState(false);
+  const [instructorStudents, setInstructorStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
 
   const adminRole = localStorage.getItem('admin_role');
   const instructorId = localStorage.getItem('instructor_id');
@@ -95,6 +97,33 @@ export default function AdminDashboard() {
         if (adminRole === 'instructor' && instructorId) {
             const { data: receipts } = await supabase.from('instructor_payments').select('*').eq('instructor_id', instructorId).order('created_at', { ascending: false });
             setMyCommissionReceipts(receipts || []);
+
+            // Fetch students for instructor
+            const { data: students, error: studentError } = await supabase
+                .from('enrollments')
+                .select(`
+                    id,
+                    created_at,
+                    course_id,
+                    courses!inner(title, instructor_id),
+                    profiles!inner(full_name, phone, nic)
+                `)
+                .eq('courses.instructor_id', instructorId)
+                .eq('status', 'approved')
+                .order('created_at', { ascending: false });
+
+            if (!studentError && students) {
+                const formatted = students.map(s => ({
+                    id: s.id,
+                    joinDate: new Date(s.created_at).toLocaleDateString(),
+                    courseTitle: s.courses?.title,
+                    fullName: s.profiles?.full_name,
+                    phone: s.profiles?.phone,
+                    nic: s.profiles?.nic
+                }));
+                setInstructorStudents(formatted);
+                setFilteredStudents(formatted);
+            }
         }
       } catch (err) {
         console.error("Dashboard Stats Fetch Error:", err);
@@ -125,24 +154,112 @@ export default function AdminDashboard() {
 
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    
-    try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('*')
-          .or(`full_name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,district.ilike.%${searchQuery}%,province.ilike.%${searchQuery}%,town.ilike.%${searchQuery}%`)
-          .eq('role', 'student')
-          .limit(10);
-
-        if (error) throw error;
-        if (data) setSearchResults(data);
-    } catch (err) {
-        alert("Search failed: " + err.message);
-    } finally {
-        setIsSearching(false);
+    if (!searchQuery.trim()) {
+        if (adminRole === 'instructor') {
+            setFilteredStudents(instructorStudents);
+        } else {
+            setSearchResults([]);
+        }
+        return;
     }
+
+    if (adminRole === 'instructor') {
+        const q = searchQuery.toLowerCase();
+        const filtered = instructorStudents.filter(s => 
+            s.fullName?.toLowerCase().includes(q) || 
+            s.phone?.includes(q) || 
+            s.nic?.toLowerCase().includes(q) ||
+            s.courseTitle?.toLowerCase().includes(q)
+        );
+        setFilteredStudents(filtered);
+    } else {
+        setIsSearching(true);
+        try {
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('*')
+              .or(`full_name.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,district.ilike.%${searchQuery}%,province.ilike.%${searchQuery}%,town.ilike.%${searchQuery}%`)
+              .eq('role', 'student')
+              .limit(10);
+
+            if (error) throw error;
+            if (data) setSearchResults(data);
+        } catch (err) {
+            alert("Search failed: " + err.message);
+        } finally {
+            setIsSearching(false);
+        }
+    }
+  };
+
+  const downloadExcel = () => {
+    if (filteredStudents.length === 0) return;
+    
+    // HTML based Excel export to support colors and force text formatting
+    const excelHeader = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; }
+          th { border: 0.5pt solid #000000; padding: 10px; font-family: Calibri, sans-serif; }
+          td { border: 0.5pt solid #000000; padding: 8px; font-family: Calibri, sans-serif; mso-number-format:"\\@"; }
+          .header-name { background-color: #FFFF00; color: #000000; }
+          .header-course { background-color: #808000; color: #FFFFFF; }
+          .header-date { background-color: #C6EFCE; color: #000000; }
+          .header-phone { background-color: #2F75B5; color: #FFFFFF; }
+          .header-nic { background-color: #FFEB9C; color: #000000; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <thead>
+            <tr>
+              <th class="header-name">Full Name</th>
+              <th class="header-course">Course Title</th>
+              <th class="header-date">Join Date</th>
+              <th class="header-phone">Phone Number</th>
+              <th class="header-nic">NIC Number</th>
+            </tr>
+          </thead>
+          <tbody>
+    `;
+
+    const rows = filteredStudents.map(s => {
+        // Format Phone: Add +94
+        let p = (s.phone || '').toString().replace(/\D/g, '');
+        if (p.startsWith('0')) p = p.substring(1);
+        if (p && !p.startsWith('94')) p = '94' + p;
+        const formattedPhone = p ? `+${p}` : '';
+
+        return `
+          <tr>
+            <td>${s.fullName || ''}</td>
+            <td>${s.courseTitle || ''}</td>
+            <td>${s.joinDate || ''}</td>
+            <td>${formattedPhone}</td>
+            <td>${s.nic || ''}</td>
+          </tr>
+        `;
+    }).join("");
+
+    const excelFooter = `
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const fullContent = excelHeader + rows + excelFooter;
+    const blob = new Blob([fullContent], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Student_List_${new Date().toLocaleDateString().replace(/\//g, '-')}.xls`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleToggleBlock = async (studentId, studentName, currentStatus) => {
@@ -298,7 +415,7 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: (adminRole === 'instructor' ? '1.2fr 1.3fr' : '1.5fr 1fr'), gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: (adminRole === 'instructor' ? '1.2fr 1.3fr' : '1.5fr 1fr'), gap: '2rem', marginBottom: '2rem' }}>
          <div className="card" style={{ padding: '2.5rem' }}>
              {adminRole === 'instructor' ? (
                  <>
@@ -347,12 +464,12 @@ export default function AdminDashboard() {
              ) : (
                  <>
                     <h2 style={{ fontSize: '1.4rem', fontWeight: 900, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <Search size={24} color="var(--color-primary)" /> Finder
+                        <Search size={24} color="var(--color-primary)" /> Global Finder
                     </h2>
                     <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem', marginBottom: '2.5rem' }}>
                         <div style={{ flex: 1, position: 'relative' }}>
                             <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
-                            <input type="text" className="input-field" placeholder="Search students..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ marginBottom: 0, paddingLeft: '3.25rem' }} />
+                            <input type="text" className="input-field" placeholder="Search any student..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ marginBottom: 0, paddingLeft: '3.25rem' }} />
                         </div>
                         <button type="submit" disabled={isSearching} className="btn btn-primary">Search</button>
                     </form>
@@ -370,25 +487,21 @@ export default function AdminDashboard() {
                                     </div>
                                     <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
                                         <span className="badge badge-success" style={{ fontSize: '0.7rem' }}>{student.is_blocked ? 'BLOCKED' : `${student.year} - ${student.grade}`}</span>
-                                        {adminRole !== 'instructor' && (
-                                            <>
-                                                <button 
-                                                    onClick={() => handleToggleBlock(student.id, student.full_name, student.is_blocked)} 
-                                                    className="btn btn-outline" 
-                                                    style={{ padding: '0.4rem', color: student.is_blocked ? '#10b981' : '#f59e0b', borderColor: student.is_blocked ? '#10b981' : '#f59e0b' }}
-                                                    title={student.is_blocked ? "Unblock User" : "Block User"}
-                                                >
-                                                    {student.is_blocked ? <UserCheck size={16} /> : <AlertCircle size={16} />}
-                                                </button>
-                                                <button onClick={() => handleDeleteStudent(student.id, student.full_name)} className="btn btn-outline" style={{ padding: '0.4rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} title="Delete Permanently"><Trash2 size={16} /></button>
-                                            </>
-                                        )}
+                                        <button 
+                                            onClick={() => handleToggleBlock(student.id, student.full_name, student.is_blocked)} 
+                                            className="btn btn-outline" 
+                                            style={{ padding: '0.4rem', color: student.is_blocked ? '#10b981' : '#f59e0b', borderColor: student.is_blocked ? '#10b981' : '#f59e0b' }}
+                                            title={student.is_blocked ? "Unblock User" : "Block User"}
+                                        >
+                                            {student.is_blocked ? <UserCheck size={16} /> : <AlertCircle size={16} />}
+                                        </button>
+                                        <button onClick={() => handleDeleteStudent(student.id, student.full_name)} className="btn btn-outline" style={{ padding: '0.4rem', color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} title="Delete Permanently"><Trash2 size={16} /></button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>Use the finder to discover students.</div>
+                        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)' }}>Search students to manage their access.</div>
                     )}
                  </>
              )}
@@ -418,6 +531,79 @@ export default function AdminDashboard() {
                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Note: These numbers only represent students whose payments have been **Approved** by an administrator.</p>
              </div>
          </div>
+      </div>
+
+      {/* NEW: Student Finder Section for everyone */}
+      <div className="card" style={{ padding: '2.5rem' }}>
+         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div>
+                <h2 style={{ fontSize: '1.4rem', fontWeight: 900, margin: 0, display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <Users size={24} color="var(--color-primary)" /> {adminRole === 'instructor' ? 'My Student Directory' : 'System Student Finder'}
+                </h2>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginTop: '4px', fontWeight: 600 }}>
+                    {adminRole === 'instructor' ? 'Search and export details of students enrolled in your courses.' : 'Search all registered students across the system.'}
+                </p>
+            </div>
+            {adminRole === 'instructor' && (
+                <button onClick={downloadExcel} className="btn btn-outline" style={{ display: 'flex', gap: '8px', alignItems: 'center', fontWeight: 800 }}>
+                    <Download size={18} /> Export Student List (Excel)
+                </button>
+            )}
+         </div>
+
+         <form onSubmit={handleSearch} style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+            <div style={{ flex: 1, position: 'relative' }}>
+                <Search size={18} style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', opacity: 0.4 }} />
+                <input 
+                    type="text" 
+                    className="input-field" 
+                    placeholder="Search by Name, Phone, or NIC..." 
+                    value={searchQuery} 
+                    onChange={e => {
+                        setSearchQuery(e.target.value);
+                        if (!e.target.value.trim() && adminRole === 'instructor') {
+                            setFilteredStudents(instructorStudents);
+                        }
+                    }} 
+                    style={{ marginBottom: 0, paddingLeft: '3.25rem' }} 
+                />
+            </div>
+            <button type="submit" disabled={isSearching} className="btn btn-primary">Search Now</button>
+         </form>
+
+         {adminRole === 'instructor' ? (
+             <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+                 {filteredStudents.length > 0 ? (
+                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1rem' }}>
+                         {filteredStudents.map((s, idx) => (
+                             <div key={idx} style={{ backgroundColor: 'var(--color-bg)', padding: '1.25rem', borderRadius: '1rem', border: '1px solid var(--color-surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                 <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                     <div style={{ backgroundColor: 'var(--color-primary-light)', color: 'var(--color-primary)', width: '40px', height: '40px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{s.fullName?.[0]}</div>
+                                     <div>
+                                         <h4 style={{ margin: 0, fontWeight: 800 }}>{s.fullName}</h4>
+                                         <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>{s.phone}</div>
+                                         <div style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 700 }}>{s.courseTitle}</div>
+                                     </div>
+                                 </div>
+                                 <div style={{ textAlign: 'right' }}>
+                                     <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>{s.nic || 'No NIC'}</div>
+                                     <div style={{ fontSize: '0.7rem', opacity: 0.5 }}>Joined: {s.joinDate}</div>
+                                 </div>
+                             </div>
+                         ))}
+                     </div>
+                 ) : (
+                     <div style={{ textAlign: 'center', padding: '3rem', border: '2px dashed var(--color-surface-border)', borderRadius: '1.5rem' }}>
+                         <Users size={48} style={{ opacity: 0.1, margin: '0 auto 1rem' }} />
+                         <p style={{ color: 'var(--color-text-muted)' }}>No students found matching your criteria.</p>
+                     </div>
+                 )}
+             </div>
+         ) : (
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--color-text-muted)', border: '2px dashed var(--color-surface-border)', borderRadius: '1.5rem' }}>
+                Use the "Global Finder" above to manage student accounts or search specifically in this directory.
+            </div>
+         )}
       </div>
     </div>
   );

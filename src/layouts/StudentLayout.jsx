@@ -1,5 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Moon, Sun, BookOpen, Menu, X, MessageSquare, Sparkles, LogOut } from 'lucide-react';
+import { Moon, Sun, BookOpen, Menu, X, MessageSquare, Sparkles, LogOut, Smartphone } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import SupportAI from '../components/SupportAI';
@@ -101,6 +101,29 @@ export default function StudentLayout() {
 
           {/* Right side actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <a 
+                href="https://fqwidxgzfjjsdjdrqhob.supabase.co/storage/v1/object/public/site-media/app3997540-w5pm7o.apk" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="nav-app-btn"
+                style={{ 
+                  textDecoration: 'none', 
+                  color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px', 
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  borderRadius: '10px',
+                  backgroundColor: (isHomePage && !isMenuOpen) ? 'rgba(255,255,255,0.1)' : 'var(--color-surface-hover)',
+                  border: '1px solid ' + ((isHomePage && !isMenuOpen) ? 'rgba(255,255,255,0.2)' : 'var(--color-surface-border)')
+                }}
+              >
+                <Smartphone size={18} />
+                <span className="desktop-only">Mobile App</span>
+              </a>
+
               <button 
                 onClick={toggleTheme} 
                 style={{ background: 'none', border: 'none', color: (isHomePage && !isMenuOpen) ? 'white' : 'var(--color-text)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0.5rem' }}
