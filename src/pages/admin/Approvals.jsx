@@ -33,14 +33,14 @@ export default function Approvals() {
     // Fetch Pending Monthly
     const { data: pending, error: errorPending } = await supabase
         .from('enrollments')
-        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email), courses(title, instructor_id, instructors(name))`)
+        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email, address, nic), courses(title, instructor_id, instructors(name))`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
     // Fetch Approved Monthly
     const { data: approved, error: errorApproved } = await supabase
         .from('enrollments')
-        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year), courses(title, instructor_id, instructors(name))`)
+        .select(`id, created_at, slip_url, status, profiles(full_name, phone, grade, subject, year, address, nic), courses(title, instructor_id, instructors(name))`)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(50);
@@ -48,14 +48,14 @@ export default function Approvals() {
     // Fetch Tute Slips
     const { data: tutes, error: errorTutes } = await supabase
         .from('tute_enrollments')
-        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
+        .select(`id, created_at, slip_url, slip_hash, status, profiles(full_name, phone, grade, subject, year, email, address, nic), tutes(title, price, instructor_id)`)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
     // Fetch Approved Tutes
     const { data: appTutes } = await supabase
         .from('tute_enrollments')
-        .select(`id, created_at, approved_at, expires_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email), tutes(title, price, instructor_id)`)
+        .select(`id, created_at, approved_at, expires_at, slip_url, status, profiles(full_name, phone, grade, subject, year, email, address, nic), tutes(title, price, instructor_id)`)
         .eq('status', 'approved')
         .order('created_at', { ascending: false })
         .limit(50);
@@ -490,8 +490,10 @@ export default function Approvals() {
                           <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>{s.profiles?.full_name}</div>
-                                  <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>{s.profiles?.phone}</div>
-                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 700 }}>{s.profiles?.year} - {s.profiles?.subject}</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{s.profiles?.phone}</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', margin: '2px 0' }}>NIC: {s.profiles?.nic || 'N/A'}</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', maxWidth: '250px', lineBreak: 'anywhere' }}>{s.profiles?.address}</div>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 700, marginTop: '4px' }}>{s.profiles?.year} - {s.profiles?.subject}</div>
                               </td>
                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 700 }}>{s.courses?.title}</div>
@@ -608,9 +610,11 @@ export default function Approvals() {
                   <tbody>
                       {filterData(tuteSlips).length === 0 ? <tr><td colSpan="4" style={{ padding: '4rem', textAlign: 'center', opacity: 0.5 }}>No pending tute requests.</td></tr> : filterData(tuteSlips).map(s => (
                           <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '1.25rem' }}>
+                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 800 }}>{s.profiles?.full_name}</div>
-                                  <div style={{ fontSize: '0.85rem', opacity: 0.6 }}>{s.profiles?.phone}</div>
+                                  <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>{s.profiles?.phone}</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>NIC: {s.profiles?.nic || 'N/A'}</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#64748b', maxWidth: '250px' }}>{s.profiles?.address}</div>
                               </td>
                               <td style={{ padding: '1.25rem' }}>
                                   <div style={{ fontWeight: 700 }}>{s.tutes?.title}</div>
@@ -692,7 +696,9 @@ export default function Approvals() {
                               <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                   <td style={{ padding: '1rem 1.25rem' }}>
                                       <div style={{ fontWeight: 700 }}>{s.profiles?.full_name}</div>
-                                      <div style={{ fontSize: '0.75rem', color: '#10b981' }}>Monthly Student</div>
+                                      <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 800 }}>{s.profiles?.phone}</div>
+                                      <div style={{ fontSize: '0.65rem', color: '#64748b' }}>NIC: {s.profiles?.nic || 'N/A'}</div>
+                                      <div style={{ fontSize: '0.65rem', color: '#64748b' }}>{s.profiles?.address}</div>
                                   </td>
                                   <td style={{ padding: '1rem 1.25rem' }}>
                                       <div>{s.courses?.title}</div>
@@ -716,7 +722,9 @@ export default function Approvals() {
                                <tr key={s.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                    <td style={{ padding: '1rem 1.25rem' }}>
                                        <div style={{ fontWeight: 700 }}>{s.profiles?.full_name}</div>
-                                       <div style={{ fontSize: '0.75rem', color: '#8b5cf6' }}>Tute Access</div>
+                                       <div style={{ fontSize: '0.75rem', color: '#8b5cf6', fontWeight: 800 }}>{s.profiles?.phone}</div>
+                                       <div style={{ fontSize: '0.65rem', color: '#64748b' }}>NIC: {s.profiles?.nic || 'N/A'}</div>
+                                       <div style={{ fontSize: '0.65rem', color: '#64748b' }}>{s.profiles?.address}</div>
                                    </td>
                                    <td style={{ padding: '1rem 1.25rem' }}>
                                        <div>{s.tutes?.title}</div>
