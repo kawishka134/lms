@@ -18,6 +18,9 @@ export default function Analytics() {
     const [timeRange, setTimeRange] = useState(6); // Default 6 months
     const [isLoading, setIsLoading] = useState(true);
 
+    const adminRole = localStorage.getItem('admin_role');
+    const currentInstructorId = localStorage.getItem('instructor_id');
+
     useEffect(() => {
         const fetchStats = async () => {
             setIsLoading(true);
@@ -32,11 +35,11 @@ export default function Analytics() {
                 const { count: pendingCommissions } = await supabase.from('instructor_payments').select('*', { count: 'exact', head: true }).eq('status', 'pending');
                 
                 // Fetch approved enrollments and tutes to calculate real revenue
-                const { data: approvedEnrollments } = await supabase.from('enrollments').select('created_at, course_id, courses(title, price)').eq('status', 'approved');
-                const { data: approvedTutes } = await supabase.from('tute_enrollments').select('created_at, tute_id, tutes(title, price)').eq('status', 'approved');
+                const { data: approvedEnrollments } = await supabase.from('enrollments').select('created_at, course_id, courses(title, price, instructor_id)').eq('status', 'approved');
+                const { data: approvedTutes } = await supabase.from('tute_enrollments').select('created_at, tute_id, tutes(title, price, instructor_id)').eq('status', 'approved');
                 
                 // Fetch approved instructor commissions
-                const { data: approvedCommissions } = await supabase.from('instructor_payments').select('created_at, amount, instructors(name)').eq('status', 'approved');
+                const { data: approvedCommissions } = await supabase.from('instructor_payments').select('created_at, amount, instructor_id, instructors(name)').eq('status', 'approved');
                 
                 let totalRevenue = 0;
                 let totalCommissions = 0;
@@ -45,6 +48,7 @@ export default function Analytics() {
 
                 if(approvedEnrollments) {
                     approvedEnrollments.forEach(e => {
+                        if (adminRole === 'instructor' && e.courses?.instructor_id !== currentInstructorId) return;
                         let amount = 0;
                         const courseTitle = e.courses?.title || 'Unknown Course';
                         
@@ -70,6 +74,7 @@ export default function Analytics() {
 
                 if (approvedTutes) {
                     approvedTutes.forEach(t => {
+                        if (adminRole === 'instructor' && t.tutes?.instructor_id !== currentInstructorId) return;
                         let amount = 0;
                         if (t.tutes && t.tutes.price) amount = Number(t.tutes.price);
                         totalRevenue += amount;
@@ -87,6 +92,7 @@ export default function Analytics() {
                 
                 if (approvedCommissions) {
                     approvedCommissions.forEach(c => {
+                        if (adminRole === 'instructor' && c.instructor_id !== currentInstructorId) return;
                         const amount = Number(c.amount) || 0;
                         totalCommissions += amount;
                         
@@ -136,7 +142,7 @@ export default function Analytics() {
                 setStats({
                     totalRevenue, // Student Collections (Volume)
                     totalCommissions, // Platform Earnings (Actual Profit)
-                    netProfit: totalCommissions, 
+                    netProfit: adminRole === 'instructor' ? (totalRevenue - totalCommissions) : totalCommissions, 
                     activeStudents: studentsCount || 0,
                     pendingApprovals: (pendingEnrollments || 0) + (pendingTutes || 0) + (pendingCommissions || 0),
                     totalClasses: classesCount || 0
@@ -228,7 +234,10 @@ export default function Analytics() {
                     const instructorName = item.instructors?.name || 'N/A';
                     const amount = item.amount || '0';
                     
-                    csvContent += `"${date}","Platform Profit","${instructorName}","N/A","Instructor-to-Owner Comm.","${amount}","Received"\n`;
+                    const typeLabel = adminRole === 'instructor' ? 'Platform Fee' : 'Platform Profit';
+                    const refLabel = adminRole === 'instructor' ? 'Paid to Platform' : 'Instructor-to-Owner Comm.';
+                    
+                    csvContent += `"${date}","${typeLabel}","${instructorName}","N/A","${refLabel}","${amount}","Received"\n`;
                 });
             }
 
@@ -337,11 +346,11 @@ export default function Analytics() {
 
                 <div className="card hover-glow" style={{ borderLeft: '6px solid #ef4444' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Platform Earnings</span>
+                         <span style={{ color: 'var(--color-text-muted)', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>{adminRole === 'instructor' ? 'Platform Fee' : 'Platform Earnings'}</span>
                          <div style={{ padding: '8px', background: '#fee2e2', borderRadius: '8px', color: '#ef4444' }}><DollarSign size={18} /></div>
                     </div>
                     <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900, color: '#991b1b' }}>Rs. {stats.totalCommissions.toLocaleString()}</h2>
-                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Commission from instructors</p>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{adminRole === 'instructor' ? 'Paid to platform' : 'Commission from instructors'}</p>
                 </div>
 
                 <div className="card hover-glow" style={{ borderLeft: '6px solid #0ea5e9' }}>
@@ -350,7 +359,7 @@ export default function Analytics() {
                          <div style={{ padding: '8px', background: '#e0f2fe', borderRadius: '8px', color: '#0ea5e9' }}><DollarSign size={18} /></div>
                     </div>
                     <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 900, color: '#0369a1' }}>Rs. {stats.netProfit.toLocaleString()}</h2>
-                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: '#0369a1', fontWeight: 800 }}>Final Platform Balance</p>
+                    <p style={{ margin: '0.4rem 0 0', fontSize: '0.75rem', color: '#0369a1', fontWeight: 800 }}>{adminRole === 'instructor' ? 'Final Instructor Balance' : 'Final Platform Balance'}</p>
                 </div>
 
                 <div className="card hover-glow" style={{ borderLeft: '6px solid #f59e0b' }}>
@@ -391,7 +400,7 @@ export default function Analytics() {
                 </div>
                 <div style={{ display: 'flex', gap: '1.5rem', marginTop: '1rem', padding: '0 1rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700 }}><div style={{ width: '12px', height: '12px', background: '#10b981', borderRadius: '2px' }}></div> Student Income</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700 }}><div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div> Instructor Commissions</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', fontWeight: 700 }}><div style={{ width: '12px', height: '12px', background: '#ef4444', borderRadius: '2px' }}></div> {adminRole === 'instructor' ? 'Platform Fees' : 'Instructor Commissions'}</div>
                 </div>
             </div>
 
